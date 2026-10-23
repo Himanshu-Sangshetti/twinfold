@@ -9,25 +9,50 @@ final class AppModel {
         case idle, scanning, results, folding, done, nothing
     }
 
+    enum Tab: String, CaseIterable { case folders = "Folders", files = "Files" }
+
     var phase: Phase = .idle
     var roots: [URL] = [FileManager.default.homeDirectoryForCurrentUser]
     var filesSeen = 0
     var compared = 0
     var toCompare = 0
+
     var report: ScanReport?
+    var scannedAt: Date?
+    private(set) var breakdown: Breakdown?
+
+    // Review state.
+    var tab: Tab = .folders
+    var kindFilter: Kind?
+    var excludedFolders: Set<String> = [] { didSet { recompute() } }
+    var excludedGroups: Set<Int> = [] { didSet { recompute() } }
+    private(set) var selected: [Copy] = []
+    private(set) var selectedBytes: Int64 = 0
+
+    // Folding state.
     var foldedCount = 0
     var foldTotal = 0
     var freedBytes: Int64 = 0
     var problems = 0
     var journal: URL?
 
-    var reclaimable: Int64 { report?.reclaimableBytes ?? 0 }
-    var groups: [DuplicateGroup] { report?.actionable ?? [] }
+    init() {
+        if let saved = ScanReport.load(), saved.reclaimableBytes > 0 {
+            let date = (try? ScanReport.savedURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate
+            show(saved, at: date ?? Date())
+        }
+    }
+
     var rootName: String {
         roots.count == 1
-            ? (roots[0].path == NSHomeDirectory() ? "Home folder" : roots[0].lastPathComponent)
-            : "\(roots.count) folders"
+            ? (roots[0].path == NSHomeDirectory() ? "Home Folder" : roots[0].lastPathComponent)
+            : "\(roots.count) Folders"
     }
+
+    var totalBytes: Int64 { breakdown?.copies.reduce(0) { $0 + $1.size } ?? 0 }
+
+    // MARK: Scanning
 
     func chooseFolders() {
         let panel = NSOpenPanel()
@@ -58,25 +83,76 @@ final class AppModel {
                     }
                 }
             }.run()
+            report.save()
             await MainActor.run {
-                self.report = report
                 self.filesSeen = report.filesScanned
-                self.phase = report.reclaimableBytes > 0 ? .results : .nothing
+                if report.reclaimableBytes > 0 { self.show(report, at: Date()) } else { self.phase = .nothing }
             }
         }
     }
 
+    func show(_ report: ScanReport, at date: Date) {
+        self.report = report
+        scannedAt = date
+        let common = roots.count == 1 ? roots[0].path : NSHomeDirectory()
+        breakdown = Breakdown(report: report, root: common)
+        kindFilter = nil
+        excludedFolders = []
+        excludedGroups = []
+        recompute()
+        phase = .results
+    }
+
+    // MARK: Review
+
+    private func recompute() {
+        guard let breakdown else { return }
+        let folders = excludedFolders.map { $0 + "/" }
+        selected = breakdown.copies.filter { c in
+            !excludedGroups.contains(c.group) && !folders.contains { c.path.hasPrefix($0) }
+        }
+        selectedBytes = selected.reduce(0) { $0 + $1.size }
+    }
+
+    func isIncluded(folder path: String) -> Bool {
+        !excludedFolders.contains { path == $0 || path.hasPrefix($0 + "/") }
+    }
+
+    func toggle(folder path: String) {
+        if let ancestor = excludedFolders.first(where: { path == $0 || path.hasPrefix($0 + "/") }) {
+            excludedFolders.remove(ancestor)
+        } else {
+            excludedFolders = excludedFolders.filter { !$0.hasPrefix(path + "/") }.union([path])
+        }
+    }
+
+    func toggle(group: Int) {
+        if excludedGroups.contains(group) { excludedGroups.remove(group) } else { excludedGroups.insert(group) }
+    }
+
+    /// Copies visible under the current kind filter.
+    var visibleCopies: [Copy] {
+        guard let breakdown else { return [] }
+        guard let kindFilter else { return breakdown.copies }
+        return breakdown.copies.filter { $0.kind == kindFilter }
+    }
+
+    // MARK: Folding
+
     func fold() {
-        let groups = self.groups
-        foldTotal = groups.reduce(0) { $0 + $1.clusters.count - 1 }
+        guard let breakdown else { return }
+        let groups = breakdown.groupsToFold(selected)
+        foldTotal = groups.reduce(0) { $0 + $1.clusters.dropFirst().reduce(0) { $0 + $1.count } }
         foldedCount = 0
         phase = .folding
         Task.detached(priority: .userInitiated) {
             let summary = Reclaimer { done, _, _ in
-                Task { @MainActor [weak self] in self?.foldedCount = done }
+                if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
             }.reclaim(groups)
+            try? FileManager.default.removeItem(at: ScanReport.savedURL)
             await MainActor.run {
-                self.freedBytes = max(summary.foldedBytes > 0 ? summary.freeAfter - summary.freeBefore : 0, 0)
+                self.foldedCount = self.foldTotal
+                self.freedBytes = max(summary.freeAfter - summary.freeBefore, 0)
                 self.problems = summary.results.count - summary.folded.count
                 self.journal = summary.journal
                 self.phase = .done
@@ -93,7 +169,7 @@ final class AppModel {
         Task.detached(priority: .userInitiated) {
             for (i, entry) in entries.enumerated() {
                 _ = Unfolder.unfold(entry.path)
-                if i % 20 == 0 { await MainActor.run { self.foldedCount = i } }
+                if i % 25 == 0 { await MainActor.run { self.foldedCount = i } }
             }
             await MainActor.run {
                 self.journal = nil
@@ -104,10 +180,11 @@ final class AppModel {
 
     func reset() {
         report = nil
+        breakdown = nil
         phase = .idle
     }
 
-    func reveal(_ group: DuplicateGroup) {
-        NSWorkspace.shared.activateFileViewerSelecting(group.files.prefix(20).map { URL(fileURLWithPath: $0) })
+    func reveal(_ paths: [String]) {
+        NSWorkspace.shared.activateFileViewerSelecting(paths.prefix(20).map { URL(fileURLWithPath: $0) })
     }
 }

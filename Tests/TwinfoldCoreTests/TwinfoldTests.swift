@@ -9,9 +9,9 @@ final class Sandbox {
     let root: String
 
     init() {
-        root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("twinfold-tests-\(UUID().uuidString)").resolvingSymlinksInPath().path
-        try! FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("twinfold-tests-\(UUID().uuidString)").path
+        try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        root = FileSystem.realPath(dir)
     }
 
     deinit {
@@ -192,5 +192,48 @@ func read(_ path: String) -> Data { FileManager.default.contents(atPath: path)! 
         #expect(Format.parseSize("64K") == 64_000)
         #expect(Format.parseSize("1.5GB") == 1_500_000_000)
         #expect(Format.parseSize("4096") == 4096)
+    }
+}
+
+@Suite struct BreakdownTests {
+    @Test func kinds() {
+        #expect(Kind.of("/u/app/node_modules/x/index.js") == .node)
+        #expect(Kind.of("/u/p/.venv/lib/python3.12/site-packages/torch/lib/a.dylib") == .python)
+        #expect(Kind.of("/u/Movies/clip.MOV") == .video)
+        #expect(Kind.of("/u/Downloads/setup.dmg") == .archives)
+        #expect(Kind.of("/u/notes/readme") == .other)
+    }
+
+    @Test func treeAttributesSpaceToWhereTheCopiesAre() {
+        let box = Sandbox()
+        let data = random(100_000)
+        box.file("keep/a.bin", data)
+        box.file("projects/one/deep/a.bin", data)
+        box.file("projects/two/a.bin", data)
+        let breakdown = Breakdown(report: box.scan(), root: box.root)
+        let tree = breakdown.tree(breakdown.copies)
+        #expect(tree.bytes == 200_000)
+        #expect(tree.children.map(\.name) == ["projects"])
+        let projects = tree.children[0]
+        #expect(projects.children.map(\.name).sorted() == ["one/deep", "two"])
+    }
+
+    @Test func untickedCopiesAreNeverFolded() throws {
+        let box = Sandbox()
+        let data = random(100_000)
+        box.file("a/x.bin", data)
+        let b = box.file("b/x.bin", data)
+        let c = box.file("c/x.bin", data)
+        let breakdown = Breakdown(report: box.scan(), root: box.root)
+        let selected = breakdown.copies.filter { !$0.path.hasPrefix(box.root + "/c/") }
+        let groups = breakdown.groupsToFold(selected)
+        #expect(groups.count == 1)
+        #expect(!groups[0].files.contains(c))
+
+        _ = Reclaimer(journal: nil).reclaim(groups)
+        let keeper = groups[0].keeper
+        #expect(FileSystem.extentKey(b, size: 100_000) == FileSystem.extentKey(keeper, size: 100_000)
+            || b == keeper)
+        #expect(FileSystem.extentKey(c, size: 100_000) != FileSystem.extentKey(keeper, size: 100_000))
     }
 }

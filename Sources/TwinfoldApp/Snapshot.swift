@@ -2,8 +2,10 @@ import AppKit
 import SwiftUI
 import TwinfoldCore
 
-/// `TWINFOLD_SNAPSHOT=<dir> Twinfold` renders every screen and the app icon to PNGs, then quits.
-/// Used to review the design and to make the README images.
+/// `TWINFOLD_SNAPSHOT=<dir> Twinfold` renders the app icon to a PNG and quits (used by scripts/bundle.sh).
+///
+/// `TWINFOLD_CAPTURE=<dir> TWINFOLD_REPORT=<scan.json> Twinfold` opens the real window with a saved
+/// `twinfold scan --json` report, captures each screen, and quits. Used to review the design.
 @MainActor
 enum Snapshot {
     static func runIfRequested() {
@@ -11,34 +13,44 @@ enum Snapshot {
         let out = URL(fileURLWithPath: dir)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-        let groups = [
-            ("node", 108_000_000, 12), ("next-swc.darwin-arm64.node", 131_000_000, 5),
-            ("libtorch_cpu.dylib", 386_000_000, 4), ("libvips-cpp.8.17.3.dylib", 16_000_000, 22),
-        ].map { name, size, n in
-            DuplicateGroup(size: Int64(size), clusters: (0..<n).map { ["/Users/me/copy\($0)/\(name)"] })
-        }
-        var report = ScanReport()
-        report.groups = groups
-        report.filesScanned = 1_204_331
-
-        let phases: [(String, AppModel.Phase, (AppModel) -> Void)] = [
-            ("1-idle", .idle, { _ in }),
-            ("2-scanning", .scanning, { $0.filesSeen = 412_880; $0.compared = 5_300; $0.toCompare = 14_150 }),
-            ("3-results", .results, { $0.report = report }),
-            ("4-folding", .folding, { $0.report = report; $0.foldTotal = 47_214; $0.foldedCount = 21_000 }),
-            ("5-done", .done, { $0.report = report; $0.freedBytes = 35_300_000_000 }),
-        ]
-        for scheme in [ColorScheme.light, .dark] {
-            for (name, phase, setup) in phases {
-                let model = AppModel()
-                model.phase = phase
-                setup(model)
-                let view = ContentView().environment(model).environment(\.colorScheme, scheme)
-                    .background(scheme == .dark ? Color(white: 0.11) : Color(white: 0.985))
-                write(view, to: out.appendingPathComponent("\(name)-\(scheme == .dark ? "dark" : "light").png"))
-            }
-        }
         write(AppIcon().frame(width: 1024, height: 1024), to: out.appendingPathComponent("icon-1024.png"), scale: 1)
+        exit(0)
+    }
+
+    static func capture(_ model: AppModel) async {
+        let env = ProcessInfo.processInfo.environment
+        guard let dir = env["TWINFOLD_CAPTURE"] else { return }
+        let out = URL(fileURLWithPath: dir)
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        if let path = env["TWINFOLD_REPORT"], let report = ScanReport.load(from: URL(fileURLWithPath: path)) {
+            model.show(report, at: Date().addingTimeInterval(-3 * 3600))
+        }
+        func shot(_ name: String) async {
+            try? await Task.sleep(for: .milliseconds(900))
+            guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("\(name).png"))
+        }
+        await shot("1-folders")
+        model.tab = .files
+        await shot("2-files")
+        if let kind = model.breakdown?.byKind(model.selected).dropFirst().first?.kind { model.kindFilter = kind }
+        await shot("3-files-filtered")
+        model.kindFilter = nil
+        model.tab = .folders
+        if let first = model.breakdown?.tree(model.visibleCopies).children.first { model.toggle(folder: first.path) }
+        await shot("4-folders-unticked")
+        model.foldTotal = model.selected.count
+        model.foldedCount = model.selected.count / 2
+        model.phase = .folding
+        await shot("5-folding")
+        model.freedBytes = model.selectedBytes
+        model.phase = .done
+        await shot("6-done")
+        model.phase = .idle
+        try? await Task.sleep(for: .milliseconds(800))
+        await shot("0-idle")
         exit(0)
     }
 
@@ -51,7 +63,8 @@ enum Snapshot {
     }
 }
 
-/// The icon: two tiles, the top one folding over onto its twin.
+/// The icon: two tiles, the left one folding over onto its twin. Flat paths only, so it renders the
+/// same in the app, in the Dock icon and in exported PNGs.
 struct AppIcon: View {
     var body: some View {
         GeometryReader { geo in
@@ -61,19 +74,34 @@ struct AppIcon: View {
                     .fill(Color(red: 0.07, green: 0.42, blue: 0.37))
                     .frame(width: s * 0.82, height: s * 0.82)
                     .shadow(color: .black.opacity(0.25), radius: s * 0.02, y: s * 0.012)
-                // The twin underneath.
-                RoundedRectangle(cornerRadius: s * 0.06, style: .continuous)
-                    .fill(Color.white.opacity(0.28))
-                    .frame(width: s * 0.30, height: s * 0.30)
-                    .offset(x: s * 0.10)
-                // The copy, folding onto it.
-                RoundedRectangle(cornerRadius: s * 0.06, style: .continuous)
+                // The twin, lying flat on the right of the hinge.
+                RoundedRectangle(cornerRadius: s * 0.05, style: .continuous)
+                    .fill(Color.white.opacity(0.30))
+                    .frame(width: s * 0.28, height: s * 0.34)
+                    .offset(x: s * 0.15)
+                // The copy, swinging over the hinge toward it.
+                FoldedTile()
                     .fill(Color.white)
-                    .frame(width: s * 0.30, height: s * 0.30)
-                    .rotation3DEffect(.degrees(-38), axis: (x: 0, y: 1, z: 0), anchor: .trailing, perspective: 0.5)
-                    .offset(x: -s * 0.20)
+                    .overlay(FoldedTile().stroke(Color.white, style: StrokeStyle(lineWidth: s * 0.03, lineJoin: .round)))
+                    .frame(width: s * 0.24, height: s * 0.34)
+                    .offset(x: -s * 0.11)
             }
             .frame(width: s, height: s)
         }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+/// A tile seen in perspective: full height at the hinge (right edge), shorter at the far edge.
+struct FoldedTile: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let inset = r.height * 0.11
+        p.move(to: CGPoint(x: r.maxX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY - inset))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + inset))
+        p.closeSubpath()
+        return p
     }
 }

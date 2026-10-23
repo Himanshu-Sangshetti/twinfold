@@ -71,6 +71,13 @@ enum FileSystem {
         return (valid & bit) != 0 && (caps & bit) != 0
     }
 
+    /// The canonical path with every symlink resolved (e.g. /var -> /private/var), so paths compare reliably.
+    public static func realPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return (path as NSString).standardizingPath }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
     static func mountPoint(of path: String) -> String {
         var fs = statfs()
         guard statfs(path, &fs) == 0 else { return "/" }

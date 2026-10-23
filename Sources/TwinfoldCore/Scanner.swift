@@ -41,6 +41,34 @@ public struct ScanReport: Sendable, Codable {
 
     public init() {}
 
+    enum CodingKeys: String, CodingKey { case groups, filesScanned, bytesScanned, skipped, seconds }
+
+    // Lenient, so `twinfold scan --json` output can be loaded back.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        groups = try c.decode([DuplicateGroup].self, forKey: .groups)
+        filesScanned = try c.decodeIfPresent(Int.self, forKey: .filesScanned) ?? 0
+        bytesScanned = try c.decodeIfPresent(Int64.self, forKey: .bytesScanned) ?? 0
+        skipped = try c.decodeIfPresent(Int.self, forKey: .skipped) ?? 0
+        seconds = try c.decodeIfPresent(Double.self, forKey: .seconds) ?? 0
+    }
+
+    /// Where the app keeps the last scan, so results survive a relaunch.
+    public static var savedURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Twinfold/last-scan.json")
+    }
+
+    public func save(to url: URL = ScanReport.savedURL) {
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(self).write(to: url, options: .atomic)
+    }
+
+    public static func load(from url: URL = ScanReport.savedURL) -> ScanReport? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(ScanReport.self, from: data)
+    }
+
     public var reclaimableBytes: Int64 { groups.reduce(0) { $0 + $1.reclaimableBytes } }
     public var alreadySharedBytes: Int64 { groups.reduce(0) { $0 + $1.alreadySharedBytes } }
     /// Only the groups that would free space.
@@ -76,7 +104,7 @@ public struct Scanner {
         var seenInodes = Set<String>()
         let uid = getuid()
         for root in options.roots {
-            let rootPath = (root as NSString).standardizingPath
+            let rootPath = FileSystem.realPath(root)
             guard FileSystem.supportsClones(rootPath) else { continue }
             walk(rootPath) { path in
                 guard let st = FileSystem.lstat(path) else { return }

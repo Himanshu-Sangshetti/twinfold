@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Results screen shows where the space is: a breakdown by kind, a folder tree and every duplicate set with each copy's location.
+- Untick folders or sets to leave them alone; the Free button follows the selection.
+- The last scan is kept, so results are still there after relaunching.
+- Paths are resolved through symlinks before comparing, so unticked folders are always respected.
+
 ## 0.1.0
 
 First release.

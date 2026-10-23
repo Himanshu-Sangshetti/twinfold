@@ -10,8 +10,9 @@ struct TwinfoldApp: App {
         Window("Twinfold", id: "main") {
             ContentView()
                 .environment(model)
+                .task { await Snapshot.capture(model) }
         }
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 880, height: 720)
     }
 }
