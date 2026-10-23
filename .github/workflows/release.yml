@@ -1,0 +1,23 @@
+name: Release
+on:
+  push: { tags: ["v*"] }
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: scripts/bundle.sh
+      - run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          tar -czf dist/twinfold-$VERSION-macos.tar.gz -C dist twinfold
+          shasum -a 256 dist/Twinfold-$VERSION.zip dist/twinfold-$VERSION-macos.tar.gz > dist/checksums.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Twinfold-*.zip
+            dist/twinfold-*-macos.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true

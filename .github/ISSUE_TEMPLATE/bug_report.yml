@@ -1,0 +1,22 @@
+name: Bug report
+description: Something went wrong
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations: { required: true }
+  - type: input
+    attributes:
+      label: Twinfold version
+      placeholder: twinfold version
+    validations: { required: true }
+  - type: input
+    attributes:
+      label: macOS version
+    validations: { required: true }
+  - type: textarea
+    attributes:
+      label: Output
+      description: Paste the terminal output if you used the command line.
+      render: text

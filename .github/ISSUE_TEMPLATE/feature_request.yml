@@ -1,0 +1,8 @@
+name: Idea
+description: Suggest an improvement
+body:
+  - type: textarea
+    attributes:
+      label: What would help
+      description: The problem you hit, and what you'd like Twinfold to do.
+    validations: { required: true }

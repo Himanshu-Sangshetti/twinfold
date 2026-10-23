@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+dist/
+*.xcodeproj
+xcuserdata/
+.DS_Store
+# internal notes stay local
+PLAN.md
+CLAUDE.md
+AGENTS.md
+.scratch/
