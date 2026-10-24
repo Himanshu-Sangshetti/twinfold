@@ -175,15 +175,35 @@ struct FileList: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let visibleGroups = Set(model.visibleCopies.map(\.group))
-        let groups = (model.breakdown?.groups ?? []).enumerated().filter { visibleGroups.contains($0.offset) }
-        List {
-            ForEach(groups, id: \.offset) { index, group in
-                FileGroupRow(index: index, group: group)
+        @Bindable var model = model
+        let visible = Set(model.visibleCopies.map(\.group)).sorted()
+        let found = model.breakdown?.find(model.fileQuery, among: visible, sort: model.fileSort) ?? []
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                TextField("Search file names and folders", text: $model.fileQuery)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Sort", selection: $model.fileSort) {
+                    ForEach(Breakdown.Sort.allCases, id: \.self) { Text($0.rawValue) }
+                }
+                .fixedSize()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            if found.isEmpty {
+                Text("No identical files match \u{201C}\(model.fileQuery)\u{201D}.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.quiet)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(found, id: \.self) { index in
+                        if let group = model.breakdown?.groups[index] { FileGroupRow(index: index, group: group) }
+                    }
+                }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
     }
 }
 

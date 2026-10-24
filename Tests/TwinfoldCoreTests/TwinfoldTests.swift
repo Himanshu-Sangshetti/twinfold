@@ -375,3 +375,22 @@ struct PerformanceTests {
         }
     }
 }
+
+@Suite struct FindTests {
+    @Test func searchMatchesNamesAndFoldersAndSorts() {
+        var report = ScanReport()
+        report.groups = [
+            DuplicateGroup(size: 100, clusters: [["/h/a/torch.dylib"], ["/h/b/torch.dylib"]]),
+            DuplicateGroup(size: 10, clusters: [["/h/x/node_modules/zod.js"], ["/h/y/node_modules/zod.js"], ["/h/z/zod.js"]]),
+            DuplicateGroup(size: 50, clusters: [["/h/photos/Beach.jpg"], ["/h/backup/Beach.jpg"]]),
+        ]
+        let b = Breakdown(report: report, root: "/h")
+        let all = Array(b.groups.indices)
+        #expect(b.find("", among: all, sort: .saved).map { b.groups[$0].size } == [100, 50, 10])
+        #expect(b.find("NODE_modules", among: all, sort: .saved).map { b.groups[$0].size } == [10])
+        #expect(b.find("backup", among: all, sort: .saved).map { b.groups[$0].size } == [50])
+        #expect(b.find("", among: all, sort: .copies).first.map { b.groups[$0].size } == 10)
+        #expect(b.find("", among: all, sort: .name).map { (b.groups[$0].keeper as NSString).lastPathComponent }
+            == ["Beach.jpg", "torch.dylib", "zod.js"])
+    }
+}

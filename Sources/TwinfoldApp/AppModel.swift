@@ -29,6 +29,8 @@ final class AppModel {
     // Review state.
     var tab: Tab = .folders
     var kindFilter: Kind?
+    var fileQuery = ""
+    var fileSort: Breakdown.Sort = .saved
     var excludedFolders: Set<String> = [] { didSet { recompute() } }
     var excludedGroups: Set<Int> = [] { didSet { recompute() } }
     private(set) var selected: [Copy] = []

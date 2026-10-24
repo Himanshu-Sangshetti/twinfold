@@ -157,6 +157,23 @@ public struct Breakdown: Sendable {
         }
     }
 
+    public enum Sort: String, CaseIterable, Sendable { case saved = "Space saved", copies = "Copies", name = "Name" }
+
+    /// Group indices matching `query` (in the file name or any path, case-insensitive), in the given order.
+    public func find(_ query: String, among indices: [Int], sort: Sort) -> [Int] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let hits = q.isEmpty ? indices : indices.filter { g in groups[g].files.contains { $0.lowercased().contains(q) } }
+        switch sort {
+        case .saved: return hits  // groups are already biggest first
+        case .copies: return hits.sorted { groups[$0].files.count > groups[$1].files.count }
+        case .name:
+            return hits.sorted {
+                (groups[$0].keeper as NSString).lastPathComponent.localizedStandardCompare(
+                    (groups[$1].keeper as NSString).lastPathComponent) == .orderedAscending
+            }
+        }
+    }
+
     /// Short "where" for a group: the distinct top-level folders its files live in.
     public func places(_ group: DuplicateGroup) -> [String] {
         var seen: [String] = []
