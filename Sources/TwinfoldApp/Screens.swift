@@ -548,7 +548,7 @@ struct AutomaticSheet: View {
                     }
                     .disabled(model.autoRunning)
                     Spacer()
-                    Button("Close") { dismiss() }.controlSize(.large)
+                    Button("Close") { dismiss() }.controlSize(.large).keyboardShortcut(.cancelAction)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -564,7 +564,7 @@ struct AutomaticSheet: View {
                 HStack(spacing: 10) {
                     PrimaryButton(title: "Get Pro for \(Store.price)") { model.buy() }
                     Spacer()
-                    Button("Not now") { dismiss() }.controlSize(.large)
+                    Button("Not now") { dismiss() }.controlSize(.large).keyboardShortcut(.cancelAction)
                 }
                 Divider()
                 Text("Already bought it? Paste the license key from your email.")

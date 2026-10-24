@@ -56,6 +56,8 @@ struct KindBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         }
         .frame(height: 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(kinds.map { "\($0.kind.rawValue) \(Format.bytes($0.bytes))" }.joined(separator: ", "))
     }
 }
 
@@ -111,10 +113,13 @@ struct FolderList: View {
     var body: some View {
         let tree = model.breakdown?.tree(model.visibleCopies)
         let total = max(1, tree?.bytes ?? 1)
-        List {
+        let selection = Binding<String?>(
+            get: { if case .folder(let p) = model.focus { p } else { nil } },
+            set: { if let p = $0 { model.focus = .folder(p) } })
+        List(selection: selection) {
             if let tree {
                 OutlineGroup(tree.children, children: \.childrenOrNil) { node in
-                    FolderRow(node: node, total: total)
+                    FolderRow(node: node, total: total).tag(node.path)
                 }
             }
         }
@@ -134,6 +139,7 @@ struct FolderRow: View {
             Toggle("", isOn: Binding(get: { included }, set: { _ in model.toggle(folder: node.path) }))
                 .toggleStyle(.checkbox)
                 .labelsHidden()
+                .accessibilityLabel("Include \(node.name)")
             Image(nsImage: Icons.folder).resizable().frame(width: 18, height: 18)
             Text(node.name)
                 .font(.system(size: 13))
@@ -151,9 +157,6 @@ struct FolderRow: View {
                 .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .onTapGesture { model.focus = .folder(node.path) }
-        .listRowBackground(model.focus == .folder(node.path) ? Color.fold.opacity(0.14) : Color.clear)
         .contextMenu { Button("Show in Finder") { model.reveal([node.path]) } }
     }
 }
@@ -195,9 +198,12 @@ struct FileList: View {
                     .foregroundStyle(Color.quiet)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
+                let selection = Binding<Int?>(
+                    get: { if case .group(let g) = model.focus { g } else { nil } },
+                    set: { if let g = $0 { model.focus = .group(g) } })
+                List(selection: selection) {
                     ForEach(found, id: \.self) { index in
-                        if let group = model.breakdown?.groups[index] { FileGroupRow(index: index, group: group) }
+                        if let group = model.breakdown?.groups[index] { FileGroupRow(index: index, group: group).tag(index) }
                     }
                 }
                 .listStyle(.inset)
@@ -218,6 +224,7 @@ struct FileGroupRow: View {
             Toggle("", isOn: Binding(get: { included }, set: { _ in model.toggle(group: index) }))
                 .toggleStyle(.checkbox)
                 .labelsHidden()
+                .accessibilityLabel("Include \((group.keeper as NSString).lastPathComponent)")
             Image(nsImage: Icons.icon(for: group.keeper)).resizable().frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text((group.keeper as NSString).lastPathComponent)
@@ -240,9 +247,6 @@ struct FileGroupRow: View {
                 .foregroundStyle(included ? Color.primary : Color.quiet)
         }
         .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .onTapGesture { model.focus = .group(index) }
-        .listRowBackground(model.focus == .group(index) ? Color.fold.opacity(0.14) : Color.clear)
     }
 
     private var places: String {

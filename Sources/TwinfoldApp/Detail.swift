@@ -60,6 +60,7 @@ struct GroupDetail: View {
                         Button { model.reveal([path]) } label: {
                             Image(systemName: "arrow.up.forward.square").foregroundStyle(Color.quiet)
                         }
+                        .accessibilityLabel("Show \((path as NSString).lastPathComponent) in Finder")
                         .buttonStyle(.plain)
                         .help("Show in Finder")
                     }
@@ -260,6 +261,7 @@ struct FolderDetail: View {
                 Button { model.reveal([path]) } label: {
                     Image(systemName: "arrow.up.forward.square").foregroundStyle(Color.quiet)
                 }
+                .accessibilityLabel("Show folder in Finder")
                 .buttonStyle(.plain)
                 .help("Show in Finder")
             }
