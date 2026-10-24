@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # End-to-end test for Twinfold: builds the CLI, creates a ~380 MB fixture in a fresh temp dir,
 # and exercises scan / reclaim / copy-on-write / undo against real APFS clones.
-# macOS + APFS only. Never touches anything outside the temp dir (and the one journal it creates).
+# macOS + APFS only. Never touches anything outside the temp dir: journals go to a temp support dir too.
 set -euo pipefail
 
 [[ "$(uname)" == "Darwin" ]] || { echo "e2e.sh needs macOS (APFS clones)"; exit 1; }
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 START=$SECONDS
-JOURNAL_DIR="$HOME/Library/Application Support/Twinfold/journal"
-
 WORK="$(realpath "$(mktemp -d "${TMPDIR:-/tmp}/twinfold-e2e.XXXXXX")")"
+export TWINFOLD_SUPPORT_DIR="$WORK/support"
+JOURNAL_DIR="$TWINFOLD_SUPPORT_DIR/journal"
 FIX="$WORK/fixture"
 NEW_JOURNALS=()
 
@@ -323,6 +323,37 @@ else
   check "undo: space reclaimable again" T scanchk "$WORK/scan3.json" "$META" expected_with_exclude no
   rm -f "$JOURNAL"
   if [[ ! -e "$JOURNAL" ]]; then record PASS "journal file removed" ""; else record FAIL "journal file removed" "$JOURNAL"; fi
+fi
+
+# ---------------------------------------------------------------- 8b. two volumes
+# Clones can't cross volumes: identical files on different volumes must never be paired.
+note "two volumes"
+VOL="$WORK/vol"
+mkdir -p "$VOL" "$WORK/xv"
+if hdiutil create -quiet -size 64m -fs APFS -volname twinfold-e2e -type SPARSE "$WORK/xv.sparseimage" &&
+   hdiutil attach -quiet -nobrowse -mountpoint "$VOL" "$WORK/xv.sparseimage"; then
+  head -c 2000000 /dev/urandom > "$WORK/xv/same.bin"
+  cp "$WORK/xv/same.bin" "$VOL/same.bin"
+  cp "$WORK/xv/same.bin" "$VOL/same-2.bin"
+  "$TF" scan --json --min-size 1K "$WORK/xv" "$VOL" > "$WORK/xv.json"
+  XGROUPS=$(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(";".join(",".join(sorted(p.rsplit("/",2)[-2]+"/"+p.rsplit("/",1)[-1] for c in g["clusters"] for p in c)) for g in r["groups"]))' "$WORK/xv.json")
+  if [[ "$XGROUPS" == "vol/same-2.bin,vol/same.bin" ]]; then
+    record PASS "two volumes: only same-volume twins are paired" ""
+  else
+    record FAIL "two volumes: only same-volume twins are paired" "$XGROUPS"
+  fi
+  "$TF" reclaim --yes --min-size 1K "$WORK/xv" "$VOL" > "$WORK/xv.out" 2>&1
+  if cmp -s "$WORK/xv/same.bin" "$VOL/same.bin" && cmp -s "$VOL/same.bin" "$VOL/same-2.bin" &&
+     [[ "$("$TF" scan --json --min-size 1K "$WORK/xv" "$VOL" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["reclaimableBytes"])')" == 0 ]]; then
+    record PASS "two volumes: fold within the second volume works, contents intact" ""
+  else
+    record FAIL "two volumes: fold within the second volume works, contents intact" "$(tail -n 3 "$WORK/xv.out")"
+  fi
+  hdiutil detach -quiet "$VOL" || hdiutil detach -quiet -force "$VOL"
+  [[ "$(ls "$JOURNAL_DIR" | wc -l | tr -d ' ')" -ge 1 ]] && record PASS "journals go to the test's own support folder" "" ||
+    record FAIL "journals go to the test's own support folder" "$(ls "$JOURNAL_DIR")"
+else
+  record FAIL "two volumes: create and attach a test APFS image" ""
 fi
 
 # ---------------------------------------------------------------- 9. report
