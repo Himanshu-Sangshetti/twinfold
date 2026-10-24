@@ -109,6 +109,23 @@ func read(_ path: String) -> Data { FileManager.default.contents(atPath: path)! 
         #expect(box.scan().reclaimableBytes == 0)
     }
 
+    @Test func proofSeesIdenticalFilesGoFromTwoStoredCopiesToOne() throws {
+        let box = Sandbox()
+        let data = random(300_000)
+        let a = box.file("a.bin", data)
+        let b = box.file("b.bin", data)
+        let before = Proof.check([a, b], size: 300_000)
+        #expect(before.allIdentical)
+        #expect(before.storedCopies == 2)
+
+        let group = try #require(box.scan().actionable.first)
+        _ = Reclaimer(journal: nil).reclaim([group])
+        let after = Proof.check([a, b], size: 300_000)
+        #expect(after.allIdentical)
+        #expect(after.missing == 0)
+        #expect(after.storedCopies == 1)
+    }
+
     @Test func foldKeepsTheFilesOwnMetadata() throws {
         let box = Sandbox()
         let data = random(100_000)

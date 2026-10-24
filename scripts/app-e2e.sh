@@ -45,6 +45,9 @@ check "unticking folder A leaves 40 MB selected" "$(field 2-unticked selected)" 
 check "app reports no problems" "$(field 3-freed problems)" 0
 atleast "app measured at least 36 MB freed" "$(field 3-freed freed)" 36000000
 check "every file's contents unchanged after freeing" "$(hashes)" "$BEFORE"
+check "done screen proof: example set now stored once" "$(field 3-freed proofStored)" 1
+check "done screen proof: every copy identical" "$(field 3-freed proofIdentical)" 1
+check "done screen proof: no copy missing" "$(field 3-freed proofMissing)" 0
 check "unticked folder A was left alone (still 160 MB to share)" "$(reclaimable)" 160000000
 
 touch "$OUT/continue"

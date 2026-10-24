@@ -11,6 +11,9 @@ final class AppModel {
 
     enum Tab: String, CaseIterable { case folders = "Folders", files = "Files" }
 
+    /// What the detail pane explains: one set of identical files, or one folder.
+    enum Focus: Hashable { case group(Int), folder(String) }
+
     var phase: Phase = .idle
     var roots: [URL] = [FileManager.default.homeDirectoryForCurrentUser]
     var filesSeen = 0
@@ -28,6 +31,12 @@ final class AppModel {
     var excludedGroups: Set<Int> = [] { didSet { recompute() } }
     private(set) var selected: [Copy] = []
     private(set) var selectedBytes: Int64 = 0
+    var focus: Focus? { didSet { if focus != oldValue { check = nil; checking = false; checkToken += 1 } } }
+
+    // Live proof for the set in focus (or the example on the done screen).
+    private(set) var check: GroupCheck?
+    private(set) var checking = false
+    private var checkToken = 0
 
     // Folding state.
     var foldedCount = 0
@@ -35,6 +44,8 @@ final class AppModel {
     var freedBytes: Int64 = 0
     var problems = 0
     var journal: URL?
+    /// The biggest set that was folded, shown on the done screen as evidence.
+    var example: DuplicateGroup?
 
     init() {
         if let saved = ScanReport.load(), saved.reclaimableBytes > 0 {
@@ -102,6 +113,7 @@ final class AppModel {
         excludedFolders = []
         excludedGroups = []
         recompute()
+        focus = breakdown?.groups.isEmpty == false ? .group(0) : nil
         phase = .results
     }
 
@@ -139,11 +151,48 @@ final class AppModel {
         return breakdown.copies.filter { $0.kind == kindFilter }
     }
 
+    /// Re-reads every file in the group from disk: present? identical? stored how many times?
+    func runCheck(_ group: DuplicateGroup) {
+        checkToken += 1
+        let token = checkToken
+        checking = true
+        check = nil
+        Task.detached(priority: .userInitiated) {
+            let result = Proof.check(group.files, size: group.size)
+            await MainActor.run {
+                guard token == self.checkToken else { return }
+                self.check = result
+                self.checking = false
+            }
+        }
+    }
+
+    /// Sets with at least one file inside `folder`, biggest first.
+    func groups(in folder: String) -> [Int] {
+        guard let breakdown else { return [] }
+        let prefix = folder + "/"
+        let visible = Set(visibleCopies.map(\.group))
+        return breakdown.groups.indices.filter { g in
+            visible.contains(g) && breakdown.groups[g].files.contains { $0.hasPrefix(prefix) }
+        }
+    }
+
+    /// "cloudfluently/posy" style label for where a file lives, relative to the scanned folder.
+    func place(of path: String, depth: Int = 2) -> String {
+        let root = breakdown?.root ?? NSHomeDirectory()
+        let rel = path.hasPrefix(root + "/") ? String(path.dropFirst(root.count + 1)) : Format.path(path)
+        return rel.split(separator: "/").dropLast().prefix(depth).joined(separator: "/")
+    }
+
     // MARK: Folding
 
     func fold() {
         guard let breakdown else { return }
         let groups = breakdown.groupsToFold(selected)
+        // The biggest set that's quick to re-read, so the done screen can prove it on its own.
+        let quick = groups.filter { $0.size * Int64($0.files.count) <= 400_000_000 }
+        example = (quick.isEmpty ? groups : quick).max { $0.reclaimableBytes < $1.reclaimableBytes }
+        check = nil
         foldTotal = groups.reduce(0) { $0 + $1.clusters.dropFirst().reduce(0) { $0 + $1.count } }
         foldedCount = 0
         phase = .folding

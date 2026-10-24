@@ -40,7 +40,7 @@ struct ContentView: View {
             case .nothing: NothingView()
             }
         }
-        .frame(minWidth: 760, idealWidth: 860, minHeight: 600, idealHeight: 700)
+        .frame(minWidth: 1080, idealWidth: 1180, minHeight: 640, idealHeight: 760)
         .background(.background)
         .animation(.smooth(duration: 0.35), value: model.phase)
     }
@@ -162,7 +162,7 @@ struct IdleView: View {
     var body: some View {
         Centered {
             AppIcon().frame(width: 112, height: 112)
-            Headline(text: "Free up space.\nDelete nothing.")
+            Headline(text: "Get disk space back\nwithout removing any files.")
             Lede(text: "Twinfold finds files that are exactly the same and stores their data once, using Apple's built-in file cloning. Every file stays in its folder, opens normally and can still be changed on its own. You see everything before anything changes.")
             Spacer().frame(height: 8)
             PrimaryButton(title: "Scan \(model.rootName)") { model.scan() }
@@ -208,12 +208,12 @@ struct ResultsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(Format.bytes(model.selectedBytes))
                         .font(.system(size: 44, weight: .semibold, design: .rounded))
-                    Text(model.selectedBytes < model.totalBytes
-                        ? "selected of \(Format.bytes(model.totalBytes)) found. \(Format.count(model.selected.count, "file has", "files have")) an exact twin; Twinfold stores that data once."
-                        : "can be freed. \(Format.count(model.selected.count, "file has", "files have")) an exact twin, so Twinfold stores that data once.")
+                    Text((model.selectedBytes < model.totalBytes ? "of \(Format.bytes(model.totalBytes)) selected. " : "")
+                        + "Your disk stores the same data twice: \(Format.count(model.selected.count, "file is an exact copy", "files are exact copies")) of other files. Twinfold keeps every file where it is and stores that data only once.")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.quiet)
-                    Label("Nothing is deleted, every file opens as normal, and you can undo it. Photos, iCloud and system files are never touched.",
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label("No file is removed, moved or renamed. Each one keeps working and can still be changed on its own. Undo any time. Photos, iCloud and system files are never touched.",
                           systemImage: "checkmark.shield")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.quiet)
@@ -221,16 +221,16 @@ struct ResultsView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 10) {
-                    PrimaryButton(title: "Free \(Format.bytes(model.selectedBytes))",
+                    PrimaryButton(title: "Save \(Format.bytes(model.selectedBytes))",
                                   disabled: model.selectedBytes == 0) { confirming = true }
                         .confirmationDialog(
-                            "Let \(Format.count(model.selected.count, "identical file", "identical files")) share space?",
+                            "Store \(Format.count(model.selected.count, "duplicate", "duplicates")) only once?",
                             isPresented: $confirming
                         ) {
-                            Button("Free \(Format.bytes(model.selectedBytes))") { model.fold() }
+                            Button("Save \(Format.bytes(model.selectedBytes))") { model.fold() }
                             Button("Cancel", role: .cancel) {}
                         } message: {
-                            Text("No file is deleted, moved or renamed, and each keeps its own dates and permissions. Every file is checked byte for byte first. You can undo this afterwards.")
+                            Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards.")
                         }
                     HStack(spacing: 6) {
                         if let date = model.scannedAt {
@@ -264,7 +264,7 @@ struct ResultsView: View {
                 Spacer()
                 Text(model.kindFilter == nil
                     ? "Untick anything you'd rather leave alone."
-                    : "Showing \(model.kindFilter!.rawValue.lowercased()) only. Free still covers all \(Format.bytes(model.selectedBytes)) ticked.")
+                    : "Showing \(model.kindFilter!.rawValue.lowercased()) only. Save still covers all \(Format.bytes(model.selectedBytes)) ticked.")
                     .font(.system(size: 12))
                     .foregroundStyle(model.kindFilter == nil ? Color.quiet : Color.primary)
                 HowItWorksButton()
@@ -274,9 +274,13 @@ struct ResultsView: View {
             .padding(.bottom, 10)
 
             Divider()
-            switch model.tab {
-            case .folders: FolderList()
-            case .files: FileList()
+            HStack(spacing: 0) {
+                switch model.tab {
+                case .folders: FolderList()
+                case .files: FileList()
+                }
+                Divider()
+                DetailPane().frame(width: 380)
             }
         }
     }
@@ -357,6 +361,9 @@ struct FolderRow: View {
                 .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { model.focus = .folder(node.path) }
+        .listRowBackground(model.focus == .folder(node.path) ? Color.fold.opacity(0.14) : Color.clear)
         .contextMenu { Button("Show in Finder") { model.reveal([node.path]) } }
     }
 }
@@ -394,62 +401,38 @@ struct FileGroupRow: View {
     @Environment(AppModel.self) private var model
     let index: Int
     let group: DuplicateGroup
-    @State private var open = false
 
     var body: some View {
         let included = !model.excludedGroups.contains(index)
-        DisclosureGroup(isExpanded: $open) {
-            ForEach(Array(group.files.enumerated()), id: \.offset) { i, path in
-                HStack(spacing: 8) {
-                    Text(Format.path((path as NSString).deletingLastPathComponent))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.quiet)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                    Spacer(minLength: 12)
-                    if path == group.keeper {
-                        Text("kept as the original").font(.system(size: 11)).foregroundStyle(.tertiary)
-                    } else if group.clusters[0].contains(path) {
-                        Text("already shares its space").font(.system(size: 11)).foregroundStyle(.tertiary)
-                    }
-                    Button { model.reveal([path]) } label: {
-                        Image(systemName: "arrow.up.forward.square").foregroundStyle(Color.quiet)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show in Finder")
-                }
-                .padding(.leading, 30)
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Toggle("", isOn: Binding(get: { included }, set: { _ in model.toggle(group: index) }))
-                    .toggleStyle(.checkbox)
-                    .labelsHidden()
-                Image(nsImage: Icons.icon(for: group.keeper)).resizable().frame(width: 18, height: 18)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text((group.keeper as NSString).lastPathComponent)
-                        .font(.system(size: 13))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(places)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-                .foregroundStyle(included ? Color.primary : Color.quiet)
-                Spacer(minLength: 16)
-                Text("\(group.files.count) identical · \(Format.bytes(group.size)) each"
-                    + (group.files.count > group.clusters.count
-                        ? " · \(group.files.count - group.clusters.count) already sharing" : ""))
-                    .font(.system(size: 12).monospacedDigit())
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(get: { included }, set: { _ in model.toggle(group: index) }))
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+            Image(nsImage: Icons.icon(for: group.keeper)).resizable().frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text((group.keeper as NSString).lastPathComponent)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(places)
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                Text(Format.bytes(group.reclaimableBytes))
-                    .font(.system(size: 13).monospacedDigit())
-                    .frame(width: 70, alignment: .trailing)
-                    .foregroundStyle(included ? Color.primary : Color.quiet)
+                    .lineLimit(1)
             }
-            .padding(.vertical, 2)
+            .foregroundStyle(included ? Color.primary : Color.quiet)
+            Spacer(minLength: 16)
+            Text("\(group.files.count)× \(Format.bytes(group.size))")
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(.tertiary)
+            Text(Format.bytes(group.reclaimableBytes))
+                .font(.system(size: 13).monospacedDigit())
+                .frame(width: 70, alignment: .trailing)
+                .foregroundStyle(included ? Color.primary : Color.quiet)
         }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { model.focus = .group(index) }
+        .listRowBackground(model.focus == .group(index) ? Color.fold.opacity(0.14) : Color.clear)
     }
 
     private var places: String {
@@ -464,7 +447,7 @@ struct FoldingView: View {
     var body: some View {
         let kinds = model.breakdown?.byKind(model.selected) ?? []
         Centered {
-            Headline(text: "Sharing space")
+            Headline(text: "Storing duplicates once")
             Text("\(model.foldedCount.formatted()) of \(model.foldTotal.formatted()) files")
                 .font(.system(size: 15).monospacedDigit())
                 .foregroundStyle(Color.quiet)
@@ -486,10 +469,24 @@ struct DoneView: View {
             Text(Format.bytes(model.freedBytes))
                 .font(.system(size: 56, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.fold)
-            Lede(text: "freed. Every file is still where it was.")
+            Lede(text: "of disk space back. Every file is still where it was.")
             if model.problems > 0 {
                 Lede(text: "\(model.problems.formatted()) files changed while we worked, so we left them alone.")
                     .font(.system(size: 13))
+            }
+            if let example = model.example {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("See for yourself: \((example.keeper as NSString).lastPathComponent)")
+                        .font(.system(size: 13, weight: .semibold))
+                    ProofSection(group: example)
+                    Button("Show all \(example.files.count) copies in Finder") { model.reveal(example.files) }
+                        .buttonStyle(.link)
+                        .font(.system(size: 12))
+                }
+                .frame(width: 400, alignment: .leading)
+                .padding(16)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .multilineTextAlignment(.leading)
             }
             Spacer().frame(height: 10)
             HStack(spacing: 12) {

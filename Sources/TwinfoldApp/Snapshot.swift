@@ -44,13 +44,16 @@ enum Snapshot {
         await shot("3-files-filtered")
         model.kindFilter = nil
         model.tab = .folders
-        if let first = model.breakdown?.tree(model.visibleCopies).children.first { model.toggle(folder: first.path) }
+        let top = model.breakdown?.tree(model.visibleCopies).children ?? []
+        if let first = top.first { model.toggle(folder: first.path) }
+        if let next = top.dropFirst().first { model.focus = .folder(next.path) }
         await shot("4-folders-unticked")
         model.foldTotal = model.selected.count
         model.foldedCount = model.selected.count / 2
         model.phase = .folding
         await shot("5-folding")
         model.freedBytes = model.selectedBytes
+        model.example = model.breakdown?.groups.first { $0.size * Int64($0.files.count) <= 400_000_000 }
         model.phase = .done
         await shot("6-done")
         model.phase = .idle
@@ -93,8 +96,13 @@ enum Snapshot {
 
         model.fold()
         await wait(for: .done)
+        // The done screen re-reads its example set from disk on its own.
+        for _ in 0..<300 where model.check == nil { try? await Task.sleep(for: .milliseconds(100)) }
         await step("3-freed", ["freed": model.freedBytes, "problems": model.problems,
-                               "journal": model.journal?.path ?? ""])
+                               "journal": model.journal?.path ?? "",
+                               "proofStored": model.check?.storedCopies ?? -1,
+                               "proofIdentical": model.check?.allIdentical == true ? 1 : 0,
+                               "proofMissing": model.check?.missing ?? -1])
 
         let go = out.appendingPathComponent("continue")
         for _ in 0..<600 where !FileManager.default.fileExists(atPath: go.path) {

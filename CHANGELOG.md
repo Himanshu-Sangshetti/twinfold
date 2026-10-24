@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Detail pane: click any folder or file to see every identical copy with its full path, where the copies live, and a now-vs-after picture of disk space.
+- Live proof: re-reads the files on demand and shows they are all in place, identical (SHA-256) and how many times the data is stored on disk. The done screen proves one folded set this way.
+- Wording no longer sounds like deleting: "Save", "stores that data only once", "without removing any files".
 - Scans about 4x faster (bulk directory reads across threads).
 - Plain wording: identical files that share space; a "How does this work?" explainer.
 - Asks for confirmation before freeing; safety line next to the button; Undo is a real button.

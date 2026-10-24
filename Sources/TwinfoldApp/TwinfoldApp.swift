@@ -16,6 +16,6 @@ struct TwinfoldApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 880, height: 720)
+        .defaultSize(width: 1180, height: 780)
     }
 }
