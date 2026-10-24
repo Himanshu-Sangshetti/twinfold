@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twinfold: get disk space back without removing files</title>
+<meta name="description" content="Twinfold finds identical files on your Mac and stores their data once. Every file stays where it is and keeps working. Free and open source, with undo.">
+<meta property="og:title" content="Twinfold">
+<meta property="og:description" content="Get disk space back on your Mac without removing any files.">
+<meta property="og:image" content="images/results-light.png">
+<link rel="icon" href="images/icon.png">
+<style>
+  :root {
+    --bg: #f6f7f6; --ink: #1b1d1c; --quiet: #626866; --line: rgba(0,0,0,.08);
+    --card: rgba(255,255,255,.72); --fold: #1f9e8a; --block: #1f9e8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151716; --ink: #eef0ef; --quiet: #9aa29f; --line: rgba(255,255,255,.1); --card: rgba(36,39,38,.72); }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; color: var(--ink); background: var(--bg);
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    background-image:
+      radial-gradient(60vw 60vw at 0% 0%, rgba(31,158,138,.20), transparent 70%),
+      radial-gradient(50vw 50vw at 100% 100%, rgba(64,120,217,.14), transparent 70%);
+    background-attachment: fixed;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 0 16px 80px; }
+  header { display: flex; align-items: center; gap: 10px; padding: 22px 0; }
+  header img { width: 32px; height: 32px; border-radius: 8px; }
+  header b { font-size: 17px; }
+  header nav { margin-left: auto; display: flex; gap: 18px; }
+  header a { color: var(--quiet); text-decoration: none; font-size: 15px; }
+  header a:hover { color: var(--ink); }
+
+  .hero { text-align: center; padding: 48px 0 24px; }
+  h1 { font: 600 clamp(34px, 6vw, 56px)/1.08 ui-rounded, -apple-system, sans-serif; margin: 0 0 18px; letter-spacing: -.02em; }
+  .lede { color: var(--quiet); font-size: clamp(17px, 2.2vw, 20px); max-width: 640px; margin: 0 auto 30px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 13px 26px; border-radius: 999px; font-weight: 600; text-decoration: none; }
+  .btn.primary { background: var(--fold); color: #fff; }
+  .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .fine { color: var(--quiet); font-size: 14px; margin-top: 14px; }
+
+  .fold { margin: 44px auto 8px; width: min(440px, 100%); }
+  .fold svg { width: 100%; height: auto; overflow: visible; }
+  .fold text { font: 12px ui-monospace, Menlo, monospace; fill: var(--ink); }
+  .fold .label { font: 600 13px -apple-system, sans-serif; text-anchor: middle; }
+  .fold .chip { fill: var(--line); }
+  .fold .link { stroke: var(--quiet); stroke-width: 1.5; stroke-dasharray: 3 3; fill: none; opacity: .6; }
+  .b-right { animation: fold 4.4s cubic-bezier(.5,0,.2,1) infinite; }
+  .b-left { animation: foldl 4.4s cubic-bezier(.5,0,.2,1) infinite; }
+  .once { animation: once 4.4s infinite; } .twice { animation: twice 4.4s infinite; }
+  @keyframes fold { 0%,35% { transform: translateX(0); opacity: 1 } 55%,85% { transform: translateX(-120px); opacity: 0 } 100% { transform: translateX(0); opacity: 1 } }
+  @keyframes foldl { 0%,35% { transform: translateX(0) } 55%,85% { transform: translateX(120px) } 100% { transform: translateX(0) } }
+  @keyframes once { 0%,45% { opacity: 0 } 55%,85% { opacity: 1 } 95%,100% { opacity: 0 } }
+  @keyframes twice { 0%,45% { opacity: 1 } 55%,85% { opacity: 0 } 95%,100% { opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .b-right,.b-left,.once,.twice { animation: none } .once { opacity: 0 } }
+
+  .shot { margin: 40px 0 70px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.12); }
+  .shot img { display: block; width: 100%; height: auto; }
+
+  section { margin: 70px 0; }
+  h2 { font: 600 30px/1.2 ui-rounded, -apple-system, sans-serif; margin: 0 0 14px; letter-spacing: -.01em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p { margin: 0; color: var(--quiet); font-size: 16px; }
+  .price { font: 600 26px ui-rounded, -apple-system, sans-serif; margin: 4px 0 10px; }
+  ul.plain { margin: 0; padding-left: 18px; color: var(--quiet); }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; font: 14px ui-monospace, Menlo, monospace; }
+  details { border-top: 1px solid var(--line); padding: 14px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--quiet); margin: 8px 0 0; }
+  a { color: var(--fold); }
+  footer { color: var(--quiet); font-size: 14px; text-align: center; padding-top: 30px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="images/icon.png" alt="">
+    <b>Twinfold</b>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="https://github.com/Himanshu-Sangshetti/twinfold">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <h1>Get disk space back<br>without removing any files.</h1>
+    <p class="lede">Your Mac keeps the same data many times over: the same <code>node_modules</code> in every project, the
+      same PyTorch in every virtualenv, the same video in two folders. Twinfold stores it once. Every file stays where
+      it is and keeps working.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Himanshu-Sangshetti/twinfold/releases/latest">Download for Mac</a>
+      <a class="btn ghost" href="https://github.com/Himanshu-Sangshetti/twinfold">View the source</a>
+    </div>
+    <p class="fine">Free and open source · macOS 14 or later · Apple silicon and Intel</p>
+
+    <div class="fold" aria-label="Two identical files, each storing its own copy, fold into one shared copy on disk.">
+      <svg viewBox="0 0 440 170" role="img">
+        <rect class="chip" x="20" y="10" width="160" height="30" rx="15"/><text x="40" y="30">app/torch.dylib</text>
+        <rect class="chip" x="260" y="10" width="160" height="30" rx="15"/><text x="280" y="30">api/torch.dylib</text>
+        <g class="twice"><path class="link" d="M100 42 L100 108"/><path class="link" d="M340 42 L340 108"/></g>
+        <g class="once"><path class="link" d="M100 42 C100 80 220 70 220 108"/><path class="link" d="M340 42 C340 80 220 70 220 108"/></g>
+        <g class="b-left"><rect x="70" y="108" width="60" height="32" rx="7" fill="#1f9e8a"/><text x="100" y="129" fill="#fff" class="label" style="fill:#fff">9 MB</text></g>
+        <g class="b-right"><rect x="310" y="108" width="60" height="32" rx="7" fill="#1f9e8a"/><text x="340" y="129" class="label" style="fill:#fff">9 MB</text></g>
+        <rect x="30" y="150" width="380" height="3" rx="2" fill="currentColor" opacity=".08"/>
+        <text class="label twice" x="220" y="168" style="fill:var(--quiet)">Stored twice</text>
+        <text class="label once" x="220" y="168" style="fill:var(--fold)">Stored once</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="shot">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="images/results-dark.png">
+      <img src="images/results-light.png" alt="Twinfold showing 11.7 GB of identical files, broken down by kind and folder, with every copy listed">
+    </picture>
+  </div>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="lede" style="margin:0;text-align:left">Twinfold uses APFS clones, the same feature Finder uses when you
+      duplicate a file. Identical files end up pointing at one copy of the data. Change one later and only that file
+      gets its own copy again; macOS handles it.</p>
+    <div class="grid">
+      <div class="card"><h3>1. Scan</h3><p>Finds files that are exactly the same, byte for byte. About a minute for a
+        home folder with millions of files. Nothing changes while it looks.</p></div>
+      <div class="card"><h3>2. See everything</h3><p>By kind, by folder and file by file, with every copy's path and a
+        live check that reads the files from disk. Untick anything; Twinfold remembers.</p></div>
+      <div class="card"><h3>3. Save, and undo any time</h3><p>Each file is compared again right before it changes.
+        Every run is kept in History, so you can undo it later.</p></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <h2>Free, and Pro</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Twinfold</h3><div class="price">Free</div>
+        <ul class="plain"><li>Unlimited scanning and saving</li><li>Live check and History with undo</li>
+          <li>Command line tool</li><li>Open source, MIT</li></ul>
+      </div>
+      <div class="card">
+        <h3>Twinfold Pro</h3><div class="price">$12 once</div>
+        <ul class="plain"><li>Automatic: keeps your Mac deduplicated every day or week, at 3 am</li>
+          <li>Menu bar item with what it saved</li><li>Up to 3 Macs, no subscription</li></ul>
+      </div>
+    </div>
+    <p class="fine" style="text-align:left">Like it but don't need Pro? <a href="https://github.com/sponsors/Himanshu-Sangshetti">Sponsor it on GitHub</a>.</p>
+  </section>
+
+  <section>
+    <h2>Command line</h2>
+    <pre>twinfold scan                 # what could be saved, changes nothing
+twinfold reclaim --dry-run    # list exactly what would change
+twinfold reclaim              # store identical files once
+twinfold undo                 # give every file its own copy again</pre>
+  </section>
+
+  <section>
+    <h2>Questions</h2>
+    <details><summary>Does it delete anything?</summary><p>No file disappears. Each duplicate is replaced by a clone of
+      its twin with the same name, contents, dates and permissions, so it opens exactly as before. What goes away is
+      the second copy of the same data on disk.</p></details>
+    <details><summary>Is it safe for code projects and virtualenvs?</summary><p>Yes. Clones are ordinary files to every
+      program. Twinfold was tested by folding PyTorch virtualenvs and Node projects and running them afterwards.</p></details>
+    <details><summary>What does it never touch?</summary><p>Photos libraries, iCloud Drive and other cloud folders,
+      system files, files you can't write, locked files, and anything you untick.</p></details>
+    <details><summary>Why does macOS warn the first time I open it?</summary><p>The app isn't notarized by Apple yet.
+      Open it once, then choose Open Anyway in System Settings, Privacy &amp; Security.</p></details>
+    <details><summary>Does deleting one copy free its space?</summary><p>Only once every twin is gone, since the others
+      still use that data. Finder shows each file's full size either way.</p></details>
+  </section>
+
+  <footer>Twinfold is open source under the MIT License · <a href="https://github.com/Himanshu-Sangshetti/twinfold">GitHub</a></footer>
+</main>
+</body>
+</html>
