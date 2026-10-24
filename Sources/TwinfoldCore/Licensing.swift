@@ -1,7 +1,7 @@
 import Foundation
 
-/// The paid tier. Scanning, the command line tool and the source are free and unlimited; the app saves up to
-/// `freeLimit` for free, and a one-time license key (sold through Dodo Payments) removes the limit.
+/// Twinfold Pro. Everything in the app, the command line tool and the source are free and unlimited; a one-time
+/// license key (sold through Dodo Payments) adds Automatic mode.
 public enum Store {
     public enum Mode: String, Sendable { case test, live }
 
@@ -25,9 +25,6 @@ public enum Store {
         return URL(string: "https://\(host)/buy/\(productID)?quantity=1")!
     }
 
-    public static var freeLimit: Int64 {
-        ProcessInfo.processInfo.environment["TWINFOLD_FREE_LIMIT"].flatMap(Format.parseSize) ?? 5_000_000_000
-    }
 }
 
 public struct License: Codable, Sendable, Equatable {
@@ -37,22 +34,13 @@ public struct License: Codable, Sendable, Equatable {
     public let activatedAt: Date
 }
 
-/// What this Mac may do: how much it has saved for free, and its license if it has one.
+/// Whether this Mac has Pro: its license, if it has one.
 public struct Entitlement: Codable, Sendable, Equatable {
     public var license: License?
-    public var savedFree: Int64 = 0
 
-    public init(license: License? = nil, savedFree: Int64 = 0) {
-        self.license = license
-        self.savedFree = savedFree
-    }
+    public init(license: License? = nil) { self.license = license }
 
     public var unlocked: Bool { license != nil }
-    public var remaining: Int64 { unlocked ? .max : max(0, Store.freeLimit - savedFree) }
-
-    public mutating func record(saved bytes: Int64) {
-        if !unlocked { savedFree += bytes }
-    }
 
     public static var url: URL { Support.directory.appendingPathComponent("entitlement.json") }
 
@@ -71,15 +59,6 @@ public struct Entitlement: Codable, Sendable, Equatable {
         try? encoder.encode(self).write(to: url, options: .atomic)
     }
 
-    /// The copies to save within what's left for free: biggest sets first, never splitting past the limit.
-    public static func pick(_ copies: [Copy], within limit: Int64) -> [Copy] {
-        var total: Int64 = 0
-        return copies.filter { c in
-            guard total + c.size <= limit else { return false }
-            total += c.size
-            return true
-        }
-    }
 }
 
 public enum ActivationError: LocalizedError, Equatable {

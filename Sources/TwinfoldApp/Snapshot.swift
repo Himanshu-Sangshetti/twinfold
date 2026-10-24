@@ -38,8 +38,8 @@ enum Snapshot {
         }
         write(HowItWorks().padding(22).frame(width: 380).background(Color(white: 0.16))
                 .environment(\.colorScheme, .dark), to: out.appendingPathComponent("7-how-it-works.png"))
-        write(UnlockSheet().environment(model).background(Color(white: look == "light" ? 0.97 : 0.16))
-                .environment(\.colorScheme, look == "light" ? .light : .dark), to: out.appendingPathComponent("8-unlock.png"))
+        write(AutomaticSheet().environment(model).background(Color(white: look == "light" ? 0.97 : 0.16))
+                .environment(\.colorScheme, look == "light" ? .light : .dark), to: out.appendingPathComponent("8-automatic.png"))
         await shot("1-folders")
         model.tab = .files
         await shot("2-files")
@@ -91,8 +91,7 @@ enum Snapshot {
         model.roots = roots.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         model.scan()
         await wait(for: .results)
-        await step("1-scanned", ["reclaimable": model.selectedBytes, "copies": model.selected.count,
-                                  "needsUnlock": model.needsUnlock ? 1 : 0, "freeBatch": model.freeBatchBytes])
+        await step("1-scanned", ["reclaimable": model.selectedBytes, "copies": model.selected.count])
 
         let biggest = model.breakdown?.tree(model.visibleCopies).children.first?.path ?? ""
         model.toggle(folder: biggest)
@@ -106,8 +105,7 @@ enum Snapshot {
                                "journal": model.journal?.path ?? "",
                                "proofStored": model.check?.storedCopies ?? -1,
                                "proofIdentical": model.check?.allIdentical == true ? 1 : 0,
-                               "proofMissing": model.check?.missing ?? -1,
-                               "freeLeft": model.entitlement.remaining])
+                               "proofMissing": model.check?.missing ?? -1])
 
         let go = out.appendingPathComponent("continue")
         for _ in 0..<600 where !FileManager.default.fileExists(atPath: go.path) {

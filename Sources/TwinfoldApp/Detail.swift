@@ -22,7 +22,6 @@ struct DetailPane: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color.primary.opacity(0.025))
     }
 }
 
@@ -73,10 +72,8 @@ struct GroupDetail: View {
 struct SectionTitle: View {
     let text: String
     var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 10, weight: .semibold))
-            .tracking(0.6)
-            .foregroundStyle(.tertiary)
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
     }
 }
 
@@ -179,7 +176,7 @@ struct ProofSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(text: "Checked on disk just now")
+            SectionTitle(text: "Check on disk")
             if let check = model.check {
                 ProofLine(ok: check.missing == 0,
                           text: check.missing == 0
@@ -280,7 +277,7 @@ struct FolderDetail: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                SectionTitle(text: "Biggest ones · click to see each copy").padding(.bottom, 4)
+                SectionTitle(text: "Biggest ones").padding(.bottom, 4)
                 ForEach(groups.prefix(40), id: \.self) { g in
                     let group = all[g]
                     Button { model.focus = .group(g) } label: {

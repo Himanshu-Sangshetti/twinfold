@@ -6,7 +6,7 @@ import TwinfoldCore
 @MainActor @Observable
 final class AppModel {
     enum Phase: Equatable {
-        case idle, scanning, results, folding, done, nothing
+        case idle, scanning, results, folding, done, nothing, history
     }
 
     enum Tab: String, CaseIterable { case folders = "Folders", files = "Files" }
@@ -44,9 +44,12 @@ final class AppModel {
     var freedBytes: Int64 = 0
     var problems = 0
     var journal: URL?
-    // Paid tier.
+    // Remembered choices, past runs, and Pro (Automatic mode).
+    private(set) var settings = Settings.load()
+    private(set) var runs: [Run] = Run.all()
+    private(set) var autoRunning = false
     private(set) var entitlement = Entitlement.load()
-    var showingUnlock = false
+    var showingAutomatic = false
     private(set) var activating = false
     private(set) var activationError: String?
 
@@ -116,7 +119,9 @@ final class AppModel {
         let common = roots.count == 1 ? roots[0].path : NSHomeDirectory()
         breakdown = Breakdown(report: report, root: common)
         kindFilter = nil
-        excludedFolders = []
+        // Folders left alone last time stay unticked.
+        let root = breakdown?.root ?? common
+        excludedFolders = Set(settings.leaveAlone.filter { $0 == root || $0.hasPrefix(root + "/") })
         excludedGroups = []
         recompute()
         focus = breakdown?.groups.isEmpty == false ? .group(0) : nil
@@ -144,6 +149,11 @@ final class AppModel {
         } else {
             excludedFolders = excludedFolders.filter { !$0.hasPrefix(path + "/") }.union([path])
         }
+        // Remember: this folder stays left alone in future scans and automatic runs.
+        let root = breakdown?.root ?? NSHomeDirectory()
+        settings.leaveAlone = settings.leaveAlone.filter { !($0 == root || $0.hasPrefix(root + "/")) }
+            + excludedFolders.sorted()
+        settings.save()
     }
 
     func toggle(group: Int) {
@@ -192,10 +202,7 @@ final class AppModel {
 
     // MARK: Folding
 
-    /// What the free allowance covers out of the current selection.
-    var freeBatch: [Copy] { Entitlement.pick(selected, within: entitlement.remaining) }
-    var freeBatchBytes: Int64 { freeBatch.reduce(0) { $0 + $1.size } }
-    var needsUnlock: Bool { selectedBytes > entitlement.remaining }
+    var totalSaved: Int64 { runs.reduce(0) { $0 + $1.bytes } }
 
     func activate(_ key: String) {
         activating = true
@@ -213,6 +220,56 @@ final class AppModel {
     }
 
     func buy() { NSWorkspace.shared.open(Store.checkoutURL) }
+
+    // MARK: Automatic (Pro)
+
+    /// Turns the schedule on or off; on means launchd runs this app with --auto at 3 am.
+    func setAutomatic(_ frequency: Settings.Frequency) {
+        guard entitlement.unlocked || frequency == .off else { return }
+        settings.automatic = frequency
+        settings.watched = roots.map(\.path)
+        settings.save()
+        if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app") {
+            try? LaunchAgent.install(executable: exe, frequency: frequency)
+        }
+    }
+
+    func runAutomaticNow() {
+        guard !autoRunning else { return }
+        autoRunning = true
+        var settings = settings
+        Task.detached(priority: .utility) {
+            AutoRun.run(settings: &settings)
+            settings.save()
+            await MainActor.run {
+                self.settings = settings
+                self.runs = Run.all()
+                self.autoRunning = false
+            }
+        }
+    }
+
+    // MARK: History
+
+    func showHistory() {
+        runs = Run.all()
+        phase = .history
+    }
+
+    func undo(_ run: Run) {
+        phase = .folding
+        foldTotal = run.files
+        foldedCount = 0
+        Task.detached(priority: .userInitiated) {
+            run.undo { done, _ in
+                if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
+            }
+            await MainActor.run {
+                self.runs = Run.all()
+                self.phase = .history
+            }
+        }
+    }
 
     func fold(_ copies: [Copy]? = nil) {
         guard let breakdown else { return }
@@ -236,8 +293,7 @@ final class AppModel {
                 self.freedBytes = max(summary.freeAfter - summary.freeBefore, 0)
                 self.problems = summary.results.count - summary.folded.count
                 self.journal = summary.journal
-                self.entitlement.record(saved: summary.foldedBytes)
-                self.entitlement.save()
+                self.runs = Run.all()
                 self.phase = .done
             }
         }
@@ -245,17 +301,17 @@ final class AppModel {
 
     func undo() {
         guard let journal else { return }
-        let entries = Journal(url: journal).entries()
+        let run = Run(journal: journal, date: Date(), files: Journal(url: journal).entries().count, bytes: 0)
         phase = .folding
-        foldTotal = entries.count
+        foldTotal = run.files
         foldedCount = 0
         Task.detached(priority: .userInitiated) {
-            for (i, entry) in entries.enumerated() {
-                _ = Unfolder.unfold(entry.path)
-                if i % 25 == 0 { await MainActor.run { self.foldedCount = i } }
+            run.undo { done, _ in
+                if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
             }
             await MainActor.run {
                 self.journal = nil
+                self.runs = Run.all()
                 self.reset()
             }
         }

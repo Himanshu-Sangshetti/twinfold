@@ -256,30 +256,18 @@ func read(_ path: String) -> Data { FileManager.default.contents(atPath: path)! 
 }
 
 @Suite struct LicensingTests {
-    @Test func freeSavingStopsAtTheLimitAndAKeyRemovesIt() {
+    @Test func aLicenseUnlocksPro() {
         var e = Entitlement()
-        #expect(e.remaining == Store.freeLimit)
-        e.record(saved: Store.freeLimit - 1_000)
-        #expect(e.remaining == 1_000)
-        e.record(saved: 5_000)
-        #expect(e.remaining == 0)
+        #expect(!e.unlocked)
         e.license = License(key: "k", instanceID: "i", email: "a@b.c", activatedAt: Date())
-        #expect(e.remaining == .max)
-    }
-
-    @Test func pickKeepsBiggestCopiesThatFit() {
-        let copies = [300, 200, 150, 50].enumerated().map {
-            Copy(id: $0.offset, group: $0.offset, path: "/x/\($0.offset)", size: Int64($0.element), kind: .other)
-        }
-        #expect(Entitlement.pick(copies, within: 400).map(\.size) == [300, 50])
-        #expect(Entitlement.pick(copies, within: 0).isEmpty)
+        #expect(e.unlocked)
     }
 
     @Test func activationAcceptsOnlyThisProduct() throws {
         func body(_ product: String) -> Data {
             Data("""
             {"id":"lki_1","business_id":"b","name":"Mac","license_key_id":"lk","created_at":"2026-10-24T00:00:00Z",
-             "product":{"product_id":"\(product)","name":"Twinfold Unlimited"},
+             "product":{"product_id":"\(product)","name":"Twinfold Pro"},
              "customer":{"customer_id":"c","name":"A","email":"a@example.com"}}
             """.utf8)
         }
@@ -305,5 +293,47 @@ struct LicenseServerTests {
         let key = try #require(ProcessInfo.processInfo.environment["TWINFOLD_TEST_LICENSE"])
         let license = try await Activation.activate(key: key, machine: "twinfold test")
         #expect(!license.instanceID.isEmpty)
+    }
+}
+
+@Suite(.serialized) struct AutomationTests {
+    @Test func automaticRunSkipsFoldersLeftAloneAndCanBeUndoneFromHistory() throws {
+        let box = Sandbox()
+        setenv("TWINFOLD_SUPPORT_DIR", "\(box.root)/.support", 1)
+        defer { unsetenv("TWINFOLD_SUPPORT_DIR") }
+        let data = random(200_000)
+        box.file("work/a.bin", data)
+        let b = box.file("work/b.bin", data)
+        box.file("keep/c.bin", data)
+
+        var settings = Settings()
+        settings.watched = [box.root]
+        settings.leaveAlone = ["\(box.root)/keep"]
+        let summary = AutoRun.run(settings: &settings)
+        #expect(summary.folded.count == 1)
+        #expect(settings.lastAutoSaved == 200_000)
+        #expect(settings.lastAutoRun != nil)
+        settings.save()
+        #expect(Settings.load() == settings)
+
+        let runs = Run.all()
+        #expect(runs.count == 1)
+        #expect(runs.first?.bytes == 200_000)
+        #expect(runs.first?.undo() == 1)
+        #expect(Run.all().isEmpty)
+        #expect(read(b) == Data(data))
+        #expect(box.scan().reclaimableBytes == 400_000)
+    }
+
+    @Test func launchAgentRunsTheAppWithAutoOnSchedule() throws {
+        let box = Sandbox()
+        setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
+        defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
+        try LaunchAgent.install(executable: "/Applications/Twinfold.app/Contents/MacOS/Twinfold", frequency: .weekly)
+        let plist = try #require(NSDictionary(contentsOf: LaunchAgent.url))
+        #expect(plist["ProgramArguments"] as? [String] == ["/Applications/Twinfold.app/Contents/MacOS/Twinfold", "--auto"])
+        #expect((plist["StartCalendarInterval"] as? [String: Int])?["Weekday"] == 0)
+        try LaunchAgent.install(executable: "/x", frequency: .off)
+        #expect(!FileManager.default.fileExists(atPath: LaunchAgent.url.path))
     }
 }

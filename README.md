@@ -26,7 +26,8 @@ On the Mac it was built on, Twinfold found **36 GB** to free, without deleting a
 home folder of 8.7 million files in about a minute, and you see exactly what will change before anything does:
 by kind, by folder, and file by file, with anything you'd rather leave alone a click away. Click any file
 to see every identical copy, the disk space now and after, and a live check that reads the files and
-shows they are byte-for-byte identical and how many times the data is really stored.
+shows they are byte-for-byte identical and how many times the data is really stored. Every run is kept in
+History, where you can undo it any time.
 
 <p align="center">
   <picture>
@@ -50,12 +51,17 @@ swift build -c release && cp .build/release/twinfold /usr/local/bin/
 
 Requires macOS 14 or later. Works on any APFS volume, the default on every Mac since 2017.
 
-## Pricing
+## Free, and Pro
 
-Scanning, the command line tool and the source code are free and unlimited, forever. The app saves up to
-5 GB for free; **Twinfold Unlimited** removes the limit for **$12 once** (no subscription, up to 3 Macs).
-Buying it is how you support the project. You can also build the app from source and use it as you like:
-it's MIT licensed.
+**Free, unlimited:** scanning, saving any amount of space, the live check, History with undo for every run,
+folders you leave alone remembered, the command line tool, and the source code.
+
+**Twinfold Pro, $12 once** (no subscription, up to 3 Macs) adds **Automatic**: Twinfold checks your
+folders at 3 am every day or week and stores new duplicates once, with a menu bar item showing what it saved.
+Every automatic run shows up in History and can be undone.
+
+If Twinfold saved you space and you'd just like to say thanks, you can
+[sponsor it on GitHub](https://github.com/sponsors/Himanshu-Sangshetti).
 
 ## Use
 
