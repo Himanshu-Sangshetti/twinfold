@@ -20,6 +20,9 @@ enum Snapshot {
     static func capture(_ model: AppModel) async {
         let env = ProcessInfo.processInfo.environment
         guard let dir = env["TWINFOLD_CAPTURE"] else { return }
+        if let look = env["TWINFOLD_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua)
+        }
         let out = URL(fileURLWithPath: dir)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         if let path = env["TWINFOLD_REPORT"], let report = ScanReport.load(from: URL(fileURLWithPath: path)) {

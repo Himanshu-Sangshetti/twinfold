@@ -82,6 +82,7 @@ struct Walker {
                 case UInt32(VDIR.rawValue):
                     if devid == device, !skip.contains(path), !Scanner.isProtectedBundle(path) { dirs(path) }
                 case UInt32(VREG.rawValue):
+                    if name.hasPrefix(".twinfold-") { continue }  // a fold's temporary clone
                     let stat = FileSystem.Stat(device: devid, inode: inode, size: size, links: nlink_t(links),
                                                flags: flags, uid: uid, mtime: mtime, ctime: ctime)
                     files(File(path: path, stat: stat))

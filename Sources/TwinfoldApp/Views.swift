@@ -209,11 +209,11 @@ struct ResultsView: View {
                     Text(Format.bytes(model.selectedBytes))
                         .font(.system(size: 44, weight: .semibold, design: .rounded))
                     Text(model.selectedBytes < model.totalBytes
-                        ? "selected of \(Format.bytes(model.totalBytes)) found. \(Format.count(model.selected.count, "identical file", "identical files")) will share space."
-                        : "can be freed by letting \(Format.count(model.selected.count, "identical file", "identical files")) share space.")
+                        ? "selected of \(Format.bytes(model.totalBytes)) found. \(Format.count(model.selected.count, "file has", "files have")) an exact twin; Twinfold stores that data once."
+                        : "can be freed. \(Format.count(model.selected.count, "file has", "files have")) an exact twin, so Twinfold stores that data once.")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.quiet)
-                    Label("Every file stays where it is. Photos and Music libraries, iCloud and system files are never touched.",
+                    Label("Nothing is deleted, every file opens as normal, and you can undo it. Photos, iCloud and system files are never touched.",
                           systemImage: "checkmark.shield")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.quiet)
@@ -235,7 +235,7 @@ struct ResultsView: View {
                     HStack(spacing: 6) {
                         if let date = model.scannedAt {
                             Text("Scanned \(date.formatted(.relative(presentation: .named)))")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.quiet)
                         }
                         QuietButton(title: "Rescan") { model.scan() }
                     }
@@ -264,9 +264,9 @@ struct ResultsView: View {
                 Spacer()
                 Text(model.kindFilter == nil
                     ? "Untick anything you'd rather leave alone."
-                    : "Showing \(model.kindFilter!.rawValue.lowercased()) only. Free still covers everything ticked.")
+                    : "Showing \(model.kindFilter!.rawValue.lowercased()) only. Free still covers all \(Format.bytes(model.selectedBytes)) ticked.")
                     .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(model.kindFilter == nil ? Color.quiet : Color.primary)
                 HowItWorksButton()
             }
             .padding(.horizontal, 28)
@@ -347,7 +347,7 @@ struct FolderRow: View {
                 .truncationMode(.middle)
                 .foregroundStyle(included ? Color.primary : Color.quiet)
             Spacer(minLength: 16)
-            Text(Format.count(node.copies, "copy", "copies"))
+            Text(Format.count(node.copies, "file", "files"))
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
             SizeBar(fraction: Double(node.bytes) / Double(total), muted: !included)
@@ -438,7 +438,7 @@ struct FileGroupRow: View {
                 }
                 .foregroundStyle(included ? Color.primary : Color.quiet)
                 Spacer(minLength: 16)
-                Text("\(Format.count(group.clusters.count - 1, "copy", "copies")) × \(Format.bytes(group.size))"
+                Text("\(group.files.count) identical · \(Format.bytes(group.size)) each"
                     + (group.files.count > group.clusters.count
                         ? " · \(group.files.count - group.clusters.count) already sharing" : ""))
                     .font(.system(size: 12).monospacedDigit())
@@ -498,9 +498,9 @@ struct DoneView: View {
                     .controlSize(.large)
                 PrimaryButton(title: "Done") { model.reset() }
             }
-            Text("Undo gives every file its own copy of its data again.")
+            Text("Undo gives every file its own copy again, which uses the space again.")
                 .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.quiet)
         }
     }
 }
@@ -569,6 +569,8 @@ struct HowItWorks: View {
             Text("Good to know: after sharing, deleting one copy frees less space than Finder shows, because its twins still use that data.")
             Text("Changed your mind? Undo gives every file its own copy again.")
                 .foregroundStyle(Color.quiet)
+            Link("Twinfold is open source: read how it works →", destination: URL(string: "https://github.com/Himanshu-Sangshetti/twinfold#is-it-safe")!)
+                .foregroundStyle(Color.fold)
         }
         .font(.system(size: 13))
         .fixedSize(horizontal: false, vertical: true)

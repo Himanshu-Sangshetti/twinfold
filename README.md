@@ -11,7 +11,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/results-dark.png">
-    <img src="docs/images/results-light.png" width="420" alt="Twinfold showing space that can be freed">
+    <img src="docs/images/results-light.png" width="720" alt="Twinfold showing where identical files take up space, by kind and by folder">
   </picture>
 </p>
 
@@ -22,7 +22,16 @@ Twinfold finds them and turns the copies into **clones**. Every file stays exact
 own name, dates and permissions, but the copies now share one set of blocks on disk. Edit one and only
 that one changes; macOS handles it automatically.
 
-On the Mac it was built on, Twinfold found **35 GB** to free, without deleting a single file.
+On the Mac it was built on, Twinfold found **36 GB** to free, without deleting a single file. It scans a
+home folder of 8.7 million files in about a minute, and you see exactly what will change before anything does:
+by kind, by folder, and file by file, with anything you'd rather leave alone a click away.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-dark.png">
+    <img src="docs/images/files-light.png" width="720" alt="Every set of identical files, with where each copy lives">
+  </picture>
+</p>
 
 ## Install
 

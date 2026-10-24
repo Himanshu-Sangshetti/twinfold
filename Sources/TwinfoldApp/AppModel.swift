@@ -72,7 +72,9 @@ final class AppModel {
         compared = 0
         toCompare = 0
         let options = ScanOptions(roots: roots.map(\.path))
+        let activity = Self.keepAwake("Scanning for identical files")
         Task.detached(priority: .userInitiated) {
+            defer { ProcessInfo.processInfo.endActivity(activity) }
             let report = Scanner(options: options) { phase, done, total in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -145,7 +147,9 @@ final class AppModel {
         foldTotal = groups.reduce(0) { $0 + $1.clusters.dropFirst().reduce(0) { $0 + $1.count } }
         foldedCount = 0
         phase = .folding
+        let activity = Self.keepAwake("Letting identical files share space")
         Task.detached(priority: .userInitiated) {
+            defer { ProcessInfo.processInfo.endActivity(activity) }
             let summary = Reclaimer { done, _, _ in
                 if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
             }.reclaim(groups)
@@ -176,6 +180,11 @@ final class AppModel {
                 self.reset()
             }
         }
+    }
+
+    /// Keeps the Mac from idling to sleep (and the app from napping) while work is running.
+    nonisolated static func keepAwake(_ reason: String) -> NSObjectProtocol {
+        ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: reason)
     }
 
     func reset() {
