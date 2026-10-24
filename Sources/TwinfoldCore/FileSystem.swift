@@ -46,9 +46,15 @@ enum FileSystem {
 
     /// A fingerprint of where a file's data lives on disk (first and last block).
     static func extentKey(_ path: String, size: Int64) -> String? {
-        guard let first = physicalOffset(path, at: 0) else { return nil }
-        let lastOffset = max(0, (size - 1) / 4096 * 4096)
-        guard let last = physicalOffset(path, at: lastOffset) else { return nil }
+        let fd = open(path, O_RDONLY | O_NOFOLLOW)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        func offset(_ at: Int64) -> Int64? {
+            var l2p = log2phys(l2p_flags: 0, l2p_contigbytes: 1, l2p_devoffset: at)
+            guard fcntl(fd, F_LOG2PHYS_EXT, &l2p) != -1 else { return nil }
+            return l2p.l2p_devoffset
+        }
+        guard let first = offset(0), let last = offset(max(0, (size - 1) / 4096 * 4096)) else { return nil }
         return "\(first):\(last)"
     }
 

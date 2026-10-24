@@ -41,7 +41,7 @@ Requires macOS 14 or later. Works on any APFS volume, the default on every Mac s
 ## Use
 
 ```sh
-twinfold scan                 # how much space duplicates waste (changes nothing)
+twinfold scan                 # how much space identical files could share (changes nothing)
 twinfold reclaim              # fold them into clones and free the space
 twinfold undo                 # give every folded file its own copy again
 ```
@@ -50,8 +50,8 @@ twinfold undo                 # give every folded file its own copy again
 $ twinfold scan ~/.cache ~/.venvs
 
   3.9 GB can be freed, nothing deleted.
-  1,137 duplicate copies in 667 sets · 676,965 files checked in 21s
-  (696 MB of duplicates already share storage)
+  1,137 identical files can share space, in 667 sets · 676,965 files checked in 21s
+  (696 MB of identical files already share space)
 
   255 MB    telecom_4trials.json  ×6
             ~/.cache/tau2-synth/data/results/telecom_4trials.json
@@ -89,6 +89,9 @@ somewhere new, so the twins are never affected.
 
 **Does Time Machine see the difference?** Time Machine backs files up by content, not by block, so your
 backups stay complete. Folded files may be backed up once more because they look changed.
+
+**Does deleting a file still free its space?** Only once every twin is gone. After sharing, deleting one copy
+frees less than Finder shows, because the others still use that data.
 
 **Why did the space come back after a while?** If you edit folded files, the edited parts take new
 space. Run Twinfold again any time.

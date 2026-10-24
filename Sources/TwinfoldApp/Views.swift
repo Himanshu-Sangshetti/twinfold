@@ -109,7 +109,7 @@ struct Lede: View {
     }
 }
 
-/// The breakdown: one bar where every segment is a kind of duplicate, sized by the space it frees.
+/// The breakdown: one bar where every segment is a kind of identical file, sized by the space it frees.
 /// While folding, the bar drains from the left as space comes back.
 struct KindBar: View {
     let kinds: [(kind: Kind, bytes: Int64)]
@@ -178,7 +178,7 @@ struct ScanningView: View {
             AppIcon().frame(width: 112, height: 112)
             Headline(text: model.toCompare > 0 ? "Comparing files" : "Looking through files")
             Text(model.toCompare > 0
-                ? "\(model.compared.formatted()) of \(model.toCompare.formatted()) possible duplicates"
+                ? "\(model.compared.formatted()) of \(model.toCompare.formatted()) possible matches"
                 : "\(model.filesSeen.formatted()) files so far")
                 .font(.system(size: 15).monospacedDigit())
                 .foregroundStyle(Color.quiet)
@@ -209,7 +209,7 @@ struct ResultsView: View {
                         .font(.system(size: 44, weight: .semibold, design: .rounded))
                         .contentTransition(.numericText())
                         .animation(.snappy, value: model.selectedBytes)
-                    Text("can be freed from \(model.selected.count.formatted()) duplicate copies. Nothing is deleted.")
+                    Text("can be freed by letting \(model.selected.count.formatted()) identical files share space. Every file stays.")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.quiet)
                 }
@@ -250,6 +250,7 @@ struct ResultsView: View {
                 Text("Untick anything you'd rather leave alone.")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
+                HowItWorksButton()
             }
             .padding(.horizontal, 28)
             .padding(.top, 20)
@@ -444,7 +445,7 @@ struct FoldingView: View {
     var body: some View {
         let kinds = model.breakdown?.byKind(model.selected) ?? []
         Centered {
-            Headline(text: "Folding duplicates")
+            Headline(text: "Sharing space")
             Text("\(model.foldedCount.formatted()) of \(model.foldTotal.formatted()) files")
                 .font(.system(size: 15).monospacedDigit())
                 .foregroundStyle(Color.quiet)
@@ -483,7 +484,7 @@ struct NothingView: View {
     var body: some View {
         Centered {
             Headline(text: "Nothing to fold")
-            Lede(text: "\(model.filesSeen.formatted()) files checked. No duplicates are wasting space here.")
+            Lede(text: "\(model.filesSeen.formatted()) files checked. No identical files are taking extra space here.")
             Spacer().frame(height: 10)
             PrimaryButton(title: "Done") { model.reset() }
         }
@@ -517,5 +518,34 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             line = max(line, size.height)
         }
+    }
+}
+
+/// The one place that explains what folding actually does, in plain words.
+struct HowItWorksButton: View {
+    @State private var shown = false
+    var body: some View {
+        Button("How does this work?") { shown.toggle() }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Color.fold)
+            .padding(.leading, 10)
+            .popover(isPresented: $shown, arrowEdge: .bottom) { HowItWorks().padding(22).frame(width: 380) }
+    }
+}
+
+struct HowItWorks: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Nothing is removed").font(.system(size: 15, weight: .semibold))
+            Text("Twinfold only touches files that are identical, byte for byte. Each one stays in its folder with its own name, dates and permissions. They simply stop storing the same data on disk twice.")
+            Text("If you change one later, only that one changes. macOS gives it its own copy of the edited parts automatically.")
+            Text("Good to know: after sharing, deleting one copy frees less space than Finder shows, because its twins still use that data.")
+                .foregroundStyle(Color.quiet)
+            Text("Changed your mind? Undo gives every file its own copy again.")
+                .foregroundStyle(Color.quiet)
+        }
+        .font(.system(size: 13))
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

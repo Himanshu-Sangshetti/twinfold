@@ -9,3 +9,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: swift build
       - run: swift test
+      - run: scripts/e2e.sh

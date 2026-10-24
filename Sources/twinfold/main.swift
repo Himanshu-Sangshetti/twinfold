@@ -10,8 +10,8 @@ let help = """
     every file stays where it is, but the copies share one set of blocks on disk.
 
     USAGE
-      twinfold scan    [PATH...]   Show how much space duplicates are wasting (changes nothing)
-      twinfold reclaim [PATH...]   Fold duplicates into clones and free that space
+      twinfold scan    [PATH...]   Show how much space identical files could share (changes nothing)
+      twinfold reclaim [PATH...]   Let identical files share space and free it
       twinfold undo    [JOURNAL]   Give every folded file its own copy again (uses the space back)
 
     OPTIONS
@@ -86,7 +86,7 @@ func scan(_ args: Args) -> ScanReport {
     let report = Scanner(options: options) { phase, done, total in
         switch phase {
         case .walking: status("Looking at \(done.formatted()) files…")
-        case .comparing: status("Comparing \(done.formatted()) of \(total.formatted()) possible duplicates…")
+        case .comparing: status("Comparing \(done.formatted()) of \(total.formatted()) possible matches…")
         case .done: clearStatus()
         }
     }.run()
@@ -98,19 +98,19 @@ func printReport(_ report: ScanReport, top: Int) {
     let actionable = report.actionable
     print("")
     if actionable.isEmpty {
-        print("  Nothing to reclaim. \(report.filesScanned.formatted()) files checked, no wasted duplicates.")
+        print("  Nothing to reclaim. \(report.filesScanned.formatted()) files checked, no identical files taking extra space.")
         if report.alreadySharedBytes > 0 {
-            print("  \(Format.bytes(report.alreadySharedBytes)) of duplicates already share storage.")
+            print("  \(Format.bytes(report.alreadySharedBytes)) of identical files already share space.")
         }
         print("")
         return
     }
     let copies = actionable.reduce(0) { $0 + $1.clusters.count - 1 }
     print("  \(Format.bytes(report.reclaimableBytes)) can be freed, nothing deleted.")
-    print("  \(copies.formatted()) duplicate copies in \(actionable.count.formatted()) sets"
+    print("  \(copies.formatted()) identical files can share space, in \(actionable.count.formatted()) sets"
         + " · \(report.filesScanned.formatted()) files checked in \(Int(report.seconds))s")
     if report.alreadySharedBytes > 0 {
-        print("  (\(Format.bytes(report.alreadySharedBytes)) of duplicates already share storage)")
+        print("  (\(Format.bytes(report.alreadySharedBytes)) of identical files already share space)")
     }
     print("")
     for group in actionable.prefix(top) {
@@ -167,7 +167,7 @@ case "reclaim", "fold":
     guard !groups.isEmpty else { exit(0) }
     if !args.yes {
         guard isatty(STDIN_FILENO) == 1 else { fail("pass --yes to reclaim without a prompt") }
-        guard confirm("  Fold these copies into clones and free \(Format.bytes(report.reclaimableBytes))?") else {
+        guard confirm("  Let these files share space and free \(Format.bytes(report.reclaimableBytes))?") else {
             print("  Nothing changed.")
             exit(0)
         }

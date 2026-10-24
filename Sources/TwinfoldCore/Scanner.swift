@@ -90,6 +90,16 @@ public struct Scanner {
         self.progress = progress
     }
 
+    /// What the walk collects, shared by the walker threads under `lock`.
+    final class Found: @unchecked Sendable {
+        let lock = NSLock()
+        var buckets: [String: [Entry]] = [:]
+        var inodes = Set<String>()
+        var files = 0
+        var bytes: Int64 = 0
+        var skipped = 0
+    }
+
     struct Entry {
         let path: String
         let stat: FileSystem.Stat
@@ -100,44 +110,66 @@ public struct Scanner {
         var report = ScanReport()
 
         // 1. Walk and bucket by (volume, size). Only same-size files can match.
-        var buckets: [String: [Entry]] = [:]
-        var seenInodes = Set<String>()
+        let found = Found()
         let uid = getuid()
+        let walker = Walker(skip: skipSet(), threads: max(4, ProcessInfo.processInfo.activeProcessorCount))
+        let minSize = options.minSize
+        let progress = self.progress
         for root in options.roots {
             let rootPath = FileSystem.realPath(root)
             guard FileSystem.supportsClones(rootPath) else { continue }
-            walk(rootPath) { path in
-                guard let st = FileSystem.lstat(path) else { return }
-                report.filesScanned += 1
-                report.bytesScanned += st.size
-                guard st.size >= options.minSize else { return }
+            walker.walk(rootPath) { file in
+                let st = file.stat
+                found.lock.lock()
+                defer { found.lock.unlock() }
+                found.files += 1
+                found.bytes += st.size
+                if found.files % 5000 == 0 { progress?(.walking, found.files, 0) }
+                guard st.size >= minSize else { return }
                 guard st.flags & FileSystem.untouchableFlags == 0, st.links == 1, st.uid == uid else {
-                    report.skipped += 1
+                    found.skipped += 1
                     return
                 }
-                guard seenInodes.insert("\(st.device):\(st.inode)").inserted else { return }
-                buckets["\(st.device):\(st.size)", default: []].append(Entry(path: path, stat: st))
-                if report.filesScanned % 2000 == 0 { progress?(.walking, report.filesScanned, 0) }
+                guard found.inodes.insert("\(st.device):\(st.inode)").inserted else { return }
+                found.buckets["\(st.device):\(st.size)", default: []].append(Entry(path: file.path, stat: st))
             }
         }
+        report.filesScanned = found.files
+        report.bytesScanned = found.bytes
+        report.skipped = found.skipped
 
         // 2. Narrow with a cheap head+tail hash, then confirm with a full hash.
-        let candidates = buckets.values.filter { $0.count > 1 }
+        let debug = ProcessInfo.processInfo.environment["TWINFOLD_DEBUG"] != nil
+        func lap(_ name: String) {
+            if debug { FileHandle.standardError.write(Data("\n[\(name)] \(String(format: "%.1f", Date().timeIntervalSince(start)))s\n".utf8)) }
+        }
+        lap("walk")
+        let candidates = found.buckets.values.filter { $0.count > 1 }
         let quick = refine(candidates) { Hashing.edges($0.path, size: $0.stat.size) }
+        lap("edges \(candidates.reduce(0) { $0 + $1.count }) files")
         let full = refine(quick, total: quick.reduce(0) { $0 + $1.count }) { Hashing.full($0.path) }
+        lap("full \(quick.reduce(0) { $0 + $1.count }) files, \(quick.reduce(Int64(0)) { $0 + $1.reduce(0) { $0 + $1.stat.size } } / 1_000_000) MB")
 
         // 3. For each identical set, find which copies already share storage.
-        for set in full {
-            var clusters: [String: [String]] = [:]
-            for entry in set {
-                let key = FileSystem.extentKey(entry.path, size: entry.stat.size) ?? "solo:\(entry.path)"
-                clusters[key, default: []].append(entry.path)
+        let flat = full.enumerated().flatMap { i, set in set.map { (i, $0) } }
+        var extents = [String?](repeating: nil, count: flat.count)
+        extents.withUnsafeMutableBufferPointer { out in
+            let out = out
+            DispatchQueue.concurrentPerform(iterations: flat.count) { i in
+                out[i] = FileSystem.extentKey(flat[i].1.path, size: flat[i].1.stat.size)
             }
+        }
+        var bySet = [[String: [String]]](repeating: [:], count: full.count)
+        for (i, item) in flat.enumerated() {
+            bySet[item.0][extents[i] ?? "solo:\(item.1.path)", default: []].append(item.1.path)
+        }
+        for (i, clusters) in bySet.enumerated() {
             let ordered = clusters.values.map { $0.sorted() }.sorted {
                 $0.count != $1.count ? $0.count > $1.count : $0[0] < $1[0]
             }
-            report.groups.append(DuplicateGroup(size: set[0].stat.size, clusters: ordered))
+            report.groups.append(DuplicateGroup(size: full[i][0].stat.size, clusters: ordered))
         }
+        lap("extents")
         report.groups.sort { $0.reclaimableBytes > $1.reclaimableBytes }
         report.seconds = Date().timeIntervalSince(start)
         progress?(.done, report.groups.count, report.groups.count)
@@ -168,42 +200,18 @@ public struct Scanner {
         return split.values.filter { $0.count > 1 }
     }
 
-    private func walk(_ root: String, _ visit: (String) -> Void) {
-        let home = NSHomeDirectory()
-        var skip = Set(options.excludes.map { ($0 as NSString).standardizingPath })
+    /// Folders never entered: the user's exclusions plus places Twinfold must not touch.
+    private func skipSet() -> Set<String> {
+        let home = FileSystem.realPath(NSHomeDirectory())
+        var skip = Set(options.excludes.map { FileSystem.realPath(($0 as NSString).expandingTildeInPath) })
         skip.formUnion([
             "\(home)/.Trash",
             "\(home)/Library/Mobile Documents",  // iCloud Drive
             "\(home)/Library/CloudStorage",  // Dropbox, Google Drive, OneDrive
-            "/System", "/private", "/dev", "/Volumes", "/Library", "/Applications", "/usr", "/bin", "/sbin",
+            "/System", "/private/var/vm", "/dev", "/Volumes", "/Library", "/Applications", "/usr", "/bin", "/sbin",
         ])
         if !options.includeLibrary { skip.insert("\(home)/Library") }
-        let rootDevice: dev_t = {
-            var st = Darwin.stat()
-            return Darwin.lstat(root, &st) == 0 ? st.st_dev : 0
-        }()
-
-        let url = URL(fileURLWithPath: root)
-        if FileSystem.lstat(root) != nil { visit(root); return }
-        guard let it = FileManager.default.enumerator(
-            at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [],
-            errorHandler: { _, _ in true })
-        else { return }
-        for case let item as URL in it {
-            let path = item.path
-            let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-            if values?.isSymbolicLink == true { continue }
-            if values?.isDirectory == true {
-                if path != root && (skip.contains(path) || Self.isProtectedBundle(path)) {
-                    it.skipDescendants()
-                    continue
-                }
-                var st = Darwin.stat()
-                if Darwin.lstat(path, &st) == 0, st.st_dev != rootDevice { it.skipDescendants() }
-                continue
-            }
-            visit(path)
-        }
+        return skip
     }
 
     /// Libraries whose apps keep their own databases about the files inside.
