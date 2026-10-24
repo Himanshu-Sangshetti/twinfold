@@ -394,7 +394,7 @@ final class AppModel {
     nonisolated static func describe(_ r: Run.UndoResult) -> String {
         var parts = ["\(Format.count(r.restored, "file has its", "files have their")) own copy again."]
         if r.gone > 0 { parts.append("\(Format.count(r.gone, "file was", "files were")) deleted or moved since, so there was nothing to restore.") }
-        if r.failed > 0 { parts.append("\(Format.count(r.failed, "file", "files")) couldn't be restored and stayed as they were.") }
+        if r.failed > 0 { parts.append("\(Format.count(r.failed, "file", "files")) couldn't be restored right now and stay in History to try again.") }
         if r.stoppedForSpace {
             parts.append("Stopped before your disk got too full: \(Format.count(r.remaining, "file needs", "files need")) \(Format.bytes(r.remainingBytes)) more. Free some space and press Undo on this run again to finish.")
         }

@@ -309,6 +309,47 @@ def crash_mid_save():
           all(shared(f"{d}/one/{i}.bin", f"{d}/two/{i}.bin") for i in range(300)), f"leftovers {leftovers}")
 
 
+def undo_keeps_earlier_sharing():
+    """Files that already shared storage before (Finder duplicates, cp -c) must share it again after undo."""
+    d = f"{VOL}/preshared"
+    write(f"{d}/keeper/a.bin", rand(20_000_000))
+    twin(f"{d}/keeper/a.bin", f"{d}/x/a.bin")
+    os.makedirs(f"{d}/y")
+    sh("cp", "-pc", f"{d}/x/a.bin", f"{d}/y/a.bin")  # a clone, sharing storage with x/a.bin
+    pairs_before = (shared(f"{d}/x/a.bin", f"{d}/y/a.bin"), shared(f"{d}/keeper/a.bin", f"{d}/x/a.bin"))
+    reclaim(d)
+    journals = sorted(os.listdir(f"{SUPPORT}/journal"), key=lambda j: os.path.getmtime(f"{SUPPORT}/journal/{j}"))
+    statfs = lambda: os.statvfs(VOL).f_bavail * os.statvfs(VOL).f_frsize
+    free_folded = statfs()
+    sh(TF, "undo", f"{SUPPORT}/journal/{journals[-1]}")
+    used = free_folded - statfs()
+    check("undo: earlier clones share storage again, as before",
+          pairs_before == (True, False) and shared(f"{d}/x/a.bin", f"{d}/y/a.bin")
+          and not shared(f"{d}/keeper/a.bin", f"{d}/x/a.bin"), str(pairs_before))
+    check("undo: uses only the space the save freed (one copy, not two)", used < 30_000_000, f"{used} bytes")
+
+
+def undo_keeps_what_it_cannot_restore():
+    d = os.path.join(WORK, "boot-disk/stuck")  # disk images ignore the lock flag
+    write(f"{d}/a.bin", rand(1_000_000)); write(f"{d}/b.bin", open(f"{d}/a.bin", "rb").read())
+    existing = set(os.listdir(f"{SUPPORT}/journal"))
+    left = reclaim(d)
+    new = set(os.listdir(f"{SUPPORT}/journal")) - existing
+    j = new.pop() if new else None
+    folded = [r["path"] for r in map(json.loads, open(f"{SUPPORT}/journal/{j}"))][0] if j else ""
+    if folded:
+        sh("chflags", "uchg", folded)  # the person locks the file after saving
+    out = subprocess.run([TF, "undo", f"{SUPPORT}/journal/{j}"], capture_output=True, text=True, env=ENV) if j else ""
+    out = (out.stdout + out.stderr) if j else ""
+    check("undo: a file it can't restore stays in History to try again",
+          j and os.path.exists(f"{SUPPORT}/journal/{j}")
+          and folded in [json.loads(l)["path"] for l in open(f"{SUPPORT}/journal/{j}")],
+          f"journal={j} left={left} undo={out}")
+    sh("chflags", "nouchg", folded)
+    sh(TF, "undo", f"{SUPPORT}/journal/{j}")
+    check("undo: after unlocking, it restores it", not shared(f"{d}/a.bin", f"{d}/b.bin") and not os.path.exists(f"{SUPPORT}/journal/{j}"))
+
+
 def undo_restores_everything():
     files = snapshot(VOL)
     metas = {p: meta(p)[p] for p in files}
@@ -337,7 +378,8 @@ if __name__ == "__main__":
         random.seed(7)
         for scenario in [metadata_is_kept, protected_files_are_left_alone, files_in_use_are_left_alone,
                          recent_files_wait, changes_after_scan_win, edits_and_deletes_after_folding,
-                         odd_names_and_sizes, crash_mid_save, undo_restores_everything, nothing_left_behind]:
+                         odd_names_and_sizes, crash_mid_save, undo_keeps_earlier_sharing,
+                         undo_keeps_what_it_cannot_restore, undo_restores_everything, nothing_left_behind]:
             print(f"== {scenario.__name__}")
             try:
                 scenario()

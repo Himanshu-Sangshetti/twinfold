@@ -11,6 +11,21 @@ public struct FoldResult: Sendable, Codable {
     public let size: Int64
     public let outcome: Outcome
     public let reason: String?
+    /// Set when this file already shared storage with `partner` before the fold (an earlier clone),
+    /// so undo can share it with that file again instead of spending space on a copy it never had.
+    public let partner: String?
+
+    public init(path: String, keeper: String, size: Int64, outcome: Outcome, reason: String?, partner: String? = nil) {
+        self.path = path
+        self.keeper = keeper
+        self.size = size
+        self.outcome = outcome
+        self.reason = reason
+        self.partner = partner
+    }
+
+    /// Space this fold freed (and undoing it uses): nothing for a file that already shared with its partner.
+    public var freedBytes: Int64 { partner == nil ? size : 0 }
 }
 
 public struct ReclaimSummary: Sendable {
@@ -20,7 +35,7 @@ public struct ReclaimSummary: Sendable {
     public var journal: URL?
 
     public var folded: [FoldResult] { results.filter { $0.outcome == .folded } }
-    public var foldedBytes: Int64 { folded.reduce(0) { $0 + $1.size } }
+    public var foldedBytes: Int64 { folded.reduce(0) { $0 + $1.freedBytes } }
 }
 
 /// Replaces duplicate files with clones of a single keeper, one file at a time.
@@ -46,11 +61,15 @@ public struct Reclaimer {
         let volume = groups.first?.keeper ?? NSHomeDirectory()
         summary.freeBefore = FileSystem.freeBytes(volume)
         let work = groups.flatMap { group in
-            group.clusters.dropFirst().flatMap { $0 }.map { (path: $0, keeper: group.keeper, size: group.size) }
+            group.clusters.dropFirst().flatMap { cluster in
+                cluster.enumerated().map {
+                    (path: $1, keeper: group.keeper, size: group.size, partner: $0 == 0 ? nil : cluster[0])
+                }
+            }
         }
         for (i, item) in work.enumerated() {
             progress?(i, work.count, item.path)
-            let result = fold(item.path, into: item.keeper, size: item.size)
+            let result = fold(item.path, into: item.keeper, size: item.size, partner: item.partner)
             if result.outcome == .folded { journal?.record(result) }
             summary.results.append(result)
         }
@@ -60,9 +79,11 @@ public struct Reclaimer {
         return summary
     }
 
-    public func fold(_ path: String, into keeper: String, size: Int64) -> FoldResult {
+    /// `waitForQuiet` false skips the "left alone for a few minutes" rule (undo re-sharing a file it just folded).
+    public func fold(_ path: String, into keeper: String, size: Int64, partner: String? = nil,
+                     waitForQuiet: Bool = true) -> FoldResult {
         func done(_ outcome: FoldResult.Outcome, _ reason: String? = nil) -> FoldResult {
-            FoldResult(path: path, keeper: keeper, size: size, outcome: outcome, reason: reason)
+            FoldResult(path: path, keeper: keeper, size: size, outcome: outcome, reason: reason, partner: partner)
         }
         guard let before = FileSystem.lstat(path), let keeperStat = FileSystem.lstat(keeper) else {
             return done(.skipped, "file is gone")
@@ -74,7 +95,7 @@ public struct Reclaimer {
         }
         guard before.size == size, keeperStat.size == size else { return done(.changed, "size changed") }
         let settled = Date().timeIntervalSince1970 - Safety.quietSeconds
-        guard Double(max(before.mtime.tv_sec, before.ctime.tv_sec)) < settled else {
+        guard !waitForQuiet || Double(max(before.mtime.tv_sec, before.ctime.tv_sec)) < settled else {
             return done(.skipped, "changed in the last few minutes")
         }
         guard !openFiles.isOpenForWriting(before), !openFiles.isOpenForWriting(keeperStat) else {

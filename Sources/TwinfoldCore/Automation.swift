@@ -51,7 +51,7 @@ public struct Run: Identifiable, Sendable {
             guard !entries.isEmpty else { return nil }
             let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             return Run(journal: url, date: date ?? .distantPast, files: entries.count,
-                       bytes: entries.reduce(0) { $0 + $1.size })
+                       bytes: entries.reduce(0) { $0 + $1.freedBytes })
         }
         .sorted { $0.date > $1.date }
     }
@@ -72,29 +72,48 @@ public struct Run: Identifiable, Sendable {
         public var remainingBytes: Int64 = 0
     }
 
-    /// Gives every file in the run its own copy again, oldest first, while there's room. Files undone (or gone)
-    /// leave the journal; if space runs out, the journal keeps the rest so the run can be finished later.
+    /// Puts every file in the run back the way it was, in order, while there's room: its own copy again, or,
+    /// for a file that already shared storage with another before (an earlier clone), sharing with that file
+    /// again, which needs no space. Files restored (or gone) leave the journal. If space runs out, or a file
+    /// can't be restored now, the journal keeps the rest so the run can be finished later.
     @discardableResult
     public func undo(progress: ((Int, Int) -> Void)? = nil) -> UndoResult {
         let entries = Journal(url: journal).entries()
         var result = UndoResult()
+        var pending = Set(entries.map(\.path))
+        var kept: [FoldResult] = []
         for (i, entry) in entries.enumerated() {
             defer { progress?(i + 1, entries.count) }
             guard FileSystem.lstat(entry.path) != nil else {
                 result.gone += 1
+                pending.remove(entry.path)
+                continue
+            }
+            // Its partner has its own storage again (or never lost it): share with it, as before the run.
+            if let partner = entry.partner, !pending.contains(partner), FileSystem.lstat(partner) != nil,
+               Reclaimer(journal: nil).fold(entry.path, into: partner, size: entry.size, waitForQuiet: false)
+                   .outcome == .folded {
+                result.restored += 1
+                pending.remove(entry.path)
                 continue
             }
             if FileSystem.freeBytes(entry.path) < entry.size + Self.reserve {
-                let rest = Array(entries[i...])
+                let rest = kept + Array(entries[i...])
                 result.stoppedForSpace = true
                 result.remaining = rest.count
-                result.remainingBytes = rest.reduce(0) { $0 + $1.size }
+                result.remainingBytes = rest.reduce(0) { $0 + $1.freedBytes }
                 Journal.rewrite(journal, with: rest)
                 return result
             }
-            if Unfolder.unfold(entry.path) { result.restored += 1 } else { result.failed += 1 }
+            if Unfolder.unfold(entry.path) {
+                result.restored += 1
+                pending.remove(entry.path)
+            } else {
+                result.failed += 1
+                kept.append(entry)
+            }
         }
-        try? FileManager.default.removeItem(at: journal)
+        if kept.isEmpty { try? FileManager.default.removeItem(at: journal) } else { Journal.rewrite(journal, with: kept) }
         return result
     }
 }
