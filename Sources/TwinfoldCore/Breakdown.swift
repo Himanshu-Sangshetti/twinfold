@@ -149,6 +149,14 @@ public struct Breakdown: Sendable {
         }
     }
 
+    /// Groups (indices, biggest first) with at least one file inside `folder`, among `visible` groups.
+    public func groups(in folder: String, visible: Set<Int>? = nil) -> [Int] {
+        let prefix = folder + "/"
+        return groups.indices.filter { g in
+            (visible?.contains(g) ?? true) && groups[g].files.contains { $0.hasPrefix(prefix) }
+        }
+    }
+
     /// Short "where" for a group: the distinct top-level folders its files live in.
     public func places(_ group: DuplicateGroup) -> [String] {
         var seen: [String] = []

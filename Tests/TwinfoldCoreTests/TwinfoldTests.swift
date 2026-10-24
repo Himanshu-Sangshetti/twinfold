@@ -357,3 +357,21 @@ struct LicenseServerTests {
         #expect(!FileManager.default.fileExists(atPath: journal.url.path))
     }
 }
+
+/// Times the folder detail work on a real saved scan; run with TWINFOLD_PERF_REPORT=<scan.json>.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["TWINFOLD_PERF_REPORT"] != nil))
+struct PerformanceTests {
+    @Test func folderDetailIsFastOnARealScan() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["TWINFOLD_PERF_REPORT"])
+        let report = try #require(ScanReport.load(from: URL(fileURLWithPath: path)))
+        var clock = ContinuousClock.now
+        let breakdown = Breakdown(report: report)
+        let tree = breakdown.tree(breakdown.copies)
+        print("perf: breakdown+tree \(ContinuousClock.now - clock), \(breakdown.groups.count) sets")
+        for folder in tree.children.prefix(5) {
+            clock = .now
+            let g = breakdown.groups(in: folder.path)
+            print("perf: groups(in: \(folder.name)) \(g.count) sets in \(ContinuousClock.now - clock)")
+        }
+    }
+}

@@ -23,7 +23,8 @@ final class AppModel {
 
     var report: ScanReport?
     var scannedAt: Date?
-    private(set) var breakdown: Breakdown?
+    private(set) var breakdown: Breakdown? { didSet { folderCache = [:] } }
+    @ObservationIgnored private var folderCache: [String: [Int]] = [:]
 
     // Review state.
     var tab: Tab = .folders
@@ -186,14 +187,14 @@ final class AppModel {
         }
     }
 
-    /// Sets with at least one file inside `folder`, biggest first.
+    /// Sets with at least one file inside `folder`, biggest first. Cached: on a big scan this takes ~60 ms.
     func groups(in folder: String) -> [Int] {
         guard let breakdown else { return [] }
-        let prefix = folder + "/"
-        let visible = Set(visibleCopies.map(\.group))
-        return breakdown.groups.indices.filter { g in
-            visible.contains(g) && breakdown.groups[g].files.contains { $0.hasPrefix(prefix) }
-        }
+        let key = "\(kindFilter?.rawValue ?? "")|\(folder)"
+        if let hit = folderCache[key] { return hit }
+        let result = breakdown.groups(in: folder, visible: kindFilter == nil ? nil : Set(visibleCopies.map(\.group)))
+        folderCache[key] = result
+        return result
     }
 
     /// "cloudfluently/posy" style label for where a file lives, relative to the scanned folder.
