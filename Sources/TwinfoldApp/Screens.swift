@@ -263,7 +263,88 @@ struct ScanningView: View {
 
 struct ResultsView: View {
     @Environment(AppModel.self) private var model
+    var body: some View {
+        if model.detailed { DetailedResults() } else { SimpleResults() }
+    }
+}
+
+/// The save confirmation, shared by both result views.
+struct SaveButton: View {
+    @Environment(AppModel.self) private var model
     @State private var confirming = false
+    var body: some View {
+        PrimaryButton(title: "Save \(Format.bytes(model.selectedBytes))", disabled: model.selectedBytes == 0) { confirming = true }
+            .confirmationDialog(
+                "Store \(Format.count(model.selected.count, "duplicate", "duplicates")) only once?",
+                isPresented: $confirming
+            ) {
+                Button("Save \(Format.bytes(model.selectedBytes))") { model.fold() }
+                if model.trialBatch.count < model.selected.count {
+                    let trial = model.trialBatch
+                    Button("Try one set first: \(model.trialName), \(Format.bytes(trial.reduce(0) { $0 + $1.size }))") {
+                        model.fold(trial)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards, from History too. Not sure yet? Try one set first and check it.")
+            }
+    }
+}
+
+/// The default: how much, one button, and where it is. Everything else is one click away.
+struct SimpleResults: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        let top = model.topFolders
+        let total = max(1, top.reduce(0) { $0 + $1.bytes })
+        Card(width: 620) {
+            VStack(spacing: 6) {
+                Text(Format.bytes(model.selectedBytes))
+                    .font(.system(size: 60, weight: .semibold, design: .rounded))
+                    .contentTransition(.numericText())
+                Text("is stored twice on your disk.")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Color.quiet)
+            }
+            SaveButton()
+            Label("Nothing is removed. Every file keeps working. Undo any time.", systemImage: "checkmark.shield")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.fold)
+            VStack(spacing: 0) {
+                ForEach(top.prefix(6)) { node in
+                    let included = model.isIncluded(folder: node.path)
+                    HStack(spacing: 10) {
+                        Toggle("", isOn: Binding(get: { included }, set: { _ in model.toggle(folder: node.path) }))
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                            .accessibilityLabel("Include \(node.name)")
+                        Image(nsImage: Icons.folder).resizable().frame(width: 18, height: 18)
+                        Text(node.name).font(.system(size: 14)).lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(included ? Color.primary : Color.quiet)
+                        Spacer()
+                        SizeBar(fraction: Double(node.bytes) / Double(total), muted: !included)
+                        Text(Format.bytes(node.bytes)).font(.system(size: 14).monospacedDigit())
+                            .foregroundStyle(included ? Color.primary : Color.quiet)
+                            .frame(width: 72, alignment: .trailing)
+                    }
+                    .padding(.vertical, 8)
+                    if node.id != top.prefix(6).last?.id { Divider() }
+                }
+            }
+            .padding(.top, 8)
+            HStack(spacing: 16) {
+                GlassButton(title: "Review every file", icon: "list.bullet") { model.detailed = true }
+                QuietButton(title: "Rescan") { model.scan() }
+                HowItWorksButton()
+            }
+            .padding(.top, 4)
+        }
+    }
+}
+
+struct DetailedResults: View {
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
@@ -293,29 +374,14 @@ struct ResultsView: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 10) {
-                        PrimaryButton(title: "Save \(Format.bytes(model.selectedBytes))",
-                                      disabled: model.selectedBytes == 0) { confirming = true }
-                            .confirmationDialog(
-                                "Store \(Format.count(model.selected.count, "duplicate", "duplicates")) only once?",
-                                isPresented: $confirming
-                            ) {
-                                Button("Save \(Format.bytes(model.selectedBytes))") { model.fold() }
-                                if model.trialBatch.count < model.selected.count {
-                                    let trial = model.trialBatch
-                                    Button("Try one set first: \(model.trialName), \(Format.bytes(trial.reduce(0) { $0 + $1.size }))") {
-                                        model.fold(trial)
-                                    }
-                                }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards, from History too. Not sure yet? Try one set first and check it.")
-                            }
+                        SaveButton()
                         HStack(spacing: 6) {
                             if let date = model.scannedAt {
                                 Text("Scanned \(date.formatted(.relative(presentation: .named)))")
                                     .foregroundStyle(Color.quiet)
                             }
                             QuietButton(title: "Rescan") { model.scan() }
+                            QuietButton(title: "Simple view") { model.detailed = false }
                         }
                         .font(.system(size: 12))
                     }

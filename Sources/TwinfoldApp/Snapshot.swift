@@ -42,6 +42,8 @@ enum Snapshot {
                 .environment(\.colorScheme, look == "light" ? .light : .dark), to: out.appendingPathComponent("8-automatic.png"))
         write(FoldAnimation(folded: true).padding(20).background(Color(white: look == "light" ? 0.97 : 0.16))
                 .environment(\.colorScheme, look == "light" ? .light : .dark), to: out.appendingPathComponent("9-folded.png"))
+        await shot("1-simple")
+        model.detailed = true
         await shot("1-folders")
         model.tab = .files
         await shot("2-files")

@@ -23,10 +23,19 @@ final class AppModel {
 
     var report: ScanReport?
     var scannedAt: Date?
-    private(set) var breakdown: Breakdown? { didSet { folderCache = [:] } }
+    private(set) var breakdown: Breakdown? {
+        didSet {
+            folderCache = [:]
+            topFolders = breakdown.map { $0.tree($0.copies).children } ?? []
+        }
+    }
+    /// The first level of the folder tree, for the simple view (computed once per scan).
+    private(set) var topFolders: [FolderNode] = []
     @ObservationIgnored private var folderCache: [String: [Int]] = [:]
 
     // Review state.
+    /// The simple view (number, Save, top folders) unless someone asks to review everything.
+    var detailed = false
     var tab: Tab = .folders
     var kindFilter: Kind?
     var fileQuery = ""
@@ -133,6 +142,7 @@ final class AppModel {
         excludedGroups = []
         recompute()
         focus = breakdown?.groups.isEmpty == false ? .group(0) : nil
+        detailed = false
         phase = .results
     }
 

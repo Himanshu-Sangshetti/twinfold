@@ -10,8 +10,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/results-dark.png">
-    <img src="docs/images/results-light.png" width="720" alt="Twinfold showing where identical files take up space, by kind and by folder">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/simple-dark.png">
+    <img src="docs/images/simple-light.png" width="720" alt="Twinfold: 11.7 GB is stored twice on your disk, with a Save button and the folders it's in">
   </picture>
 </p>
 
