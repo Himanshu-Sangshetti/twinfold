@@ -6,11 +6,11 @@ public enum Store {
     public enum Mode: String, Sendable { case test, live }
 
     /// Flip to `.live` once the live product exists; `scripts/bundle.sh` warns while this is `.test`.
-    public static let mode: Mode = .test
+    public static let mode: Mode = .live
 
     static let products: [Mode: String] = [
         .test: "pdt_0NqQFyUubmksazGDaYvmQ",
-        .live: "",
+        .live: "pdt_0NqR0VmiWXt8Rxu6048ZS",
     ]
 
     public static var productID: String { products[mode] ?? "" }
