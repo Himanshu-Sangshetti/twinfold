@@ -13,6 +13,7 @@ let help = """
       twinfold scan    [PATH...]   Show how much space identical files could share (changes nothing)
       twinfold reclaim [PATH...]   Let identical files share space and free it
       twinfold undo    [JOURNAL]   Give every folded file its own copy again (uses the space back)
+      twinfold mcp                 Run as an MCP server for AI agents (Claude Code, Cursor, Claude Desktop)
 
     OPTIONS
       --min-size SIZE     Ignore files smaller than SIZE (default 64K)
@@ -217,6 +218,9 @@ case "undo":
         print("  Free some space, then run `twinfold undo \(url.path)` again to finish.")
     }
     print("")
+
+case "mcp":
+    MCPServer.run()
 
 case "version", "--version", "-v":
     print("twinfold \(version)")

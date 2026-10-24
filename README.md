@@ -87,6 +87,23 @@ $ twinfold scan ~/.cache ~/.venvs
 Pass folders to scan only those. `--min-size 1M` skips small files, `--json` prints machine-readable
 output, and `--dry-run` shows what `reclaim` would do. See `twinfold help` for everything.
 
+## Use with AI agents
+
+Twinfold is also an [MCP](https://modelcontextprotocol.io) server, so Claude, Cursor or any agent can do it for you:
+"find what's duplicated in my projects folder and save it". The agent can scan, list and explain sets, re-check
+files on disk, save, see history and undo. Saving and undoing always take two steps: a dry run first, then an
+explicit confirm, which agents are told to ask you for.
+
+```sh
+claude mcp add twinfold -- twinfold mcp          # Claude Code
+```
+
+For Claude Desktop or Cursor, add this to their MCP settings:
+
+```json
+{ "mcpServers": { "twinfold": { "command": "twinfold", "args": ["mcp"] } } }
+```
+
 ## Is it safe?
 
 Twinfold never deletes a file. For each copy it:
