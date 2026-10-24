@@ -6,6 +6,7 @@ permissions:
 jobs:
   release:
     runs-on: macos-26
+    env: { TWINFOLD_QUIET_SECONDS: "0" }
     steps:
       - uses: actions/checkout@v4
       - run: swift test

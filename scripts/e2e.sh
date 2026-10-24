@@ -9,6 +9,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 START=$SECONDS
 WORK="$(realpath "$(mktemp -d "${TMPDIR:-/tmp}/twinfold-e2e.XXXXXX")")"
 export TWINFOLD_SUPPORT_DIR="$WORK/support"
+export TWINFOLD_QUIET_SECONDS=0
 JOURNAL_DIR="$TWINFOLD_SUPPORT_DIR/journal"
 FIX="$WORK/fixture"
 NEW_JOURNALS=()

@@ -29,9 +29,10 @@ enum FileSystem {
 
     /// Flags that mean "leave this file alone": iCloud/File Provider placeholders,
     /// transparently compressed system files, and locked or append-only files.
+    /// Also files with a document id (UF_TRACKED), which Versions and iCloud follow by inode.
     static let untouchableFlags: UInt32 =
         0x4000_0000 /* SF_DATALESS */ | UInt32(UF_COMPRESSED) | UInt32(UF_IMMUTABLE) | UInt32(SF_IMMUTABLE)
-        | UInt32(UF_APPEND) | UInt32(SF_APPEND) | UInt32(SF_RESTRICTED)
+        | UInt32(UF_APPEND) | UInt32(SF_APPEND) | UInt32(SF_RESTRICTED) | UInt32(UF_TRACKED)
 
     /// Physical device offset of the byte at `offset` in the file, or nil if unknown.
     /// Two files whose first and last blocks map to the same place already share storage.
@@ -126,37 +127,164 @@ enum FileSystem {
         return total
     }
 
-    /// Copies ownership-independent metadata (mode, flags, ACL, xattrs, times) from `source` onto `target`.
+    /// Copies ownership-independent metadata (xattrs, mode, flags, ACL, times) from `source` onto `target`.
     static func copyMetadata(from source: String, to target: String) -> Bool {
-        // The clone carries the keeper's xattrs; start clean so only the original's survive.
-        let size = listxattr(target, nil, 0, XATTR_NOFOLLOW)
-        if size > 0 {
-            var names = [CChar](repeating: 0, count: size)
-            _ = listxattr(target, &names, size, XATTR_NOFOLLOW)
-            for name in names.split(separator: 0) {
-                let n = String(cString: Array(name) + [0])
-                removexattr(target, n, XATTR_NOFOLLOW)
-            }
-        }
-        let flags = copyfile_flags_t(COPYFILE_SECURITY | COPYFILE_XATTR | COPYFILE_STAT | COPYFILE_NOFOLLOW)
-        guard copyfile(source, target, nil, flags) == 0 else { return false }
+        // Extended attributes are copied byte for byte by hand, after copyfile(3): it re-stamps
+        // com.apple.quarantine on the way, dropping the app that downloaded the file.
+        let flags = copyfile_flags_t(COPYFILE_SECURITY | COPYFILE_STAT | COPYFILE_NOFOLLOW)
+        guard copyfile(source, target, nil, flags) == 0, copyXattrs(from: source, to: target) else { return false }
         return copyTimes(from: source, to: target)
     }
 
-    /// Creation, modification and access dates, so Finder shows exactly what it showed before.
+    static func xattrNames(_ path: String) -> [String]? {
+        let size = listxattr(path, nil, 0, XATTR_NOFOLLOW)
+        guard size > 0 else { return size == 0 ? [] : nil }
+        var names = [CChar](repeating: 0, count: size)
+        guard listxattr(path, &names, size, XATTR_NOFOLLOW) == size else { return nil }
+        return names.split(separator: 0).map { String(cString: Array($0) + [0]) }
+    }
+
+    static func xattr(_ path: String, _ name: String) -> [UInt8]? {
+        let length = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
+        guard length >= 0 else { return nil }
+        var value = [UInt8](repeating: 0, count: length)
+        guard getxattr(path, name, &value, length, 0, XATTR_NOFOLLOW) == length else { return nil }
+        return value
+    }
+
+    /// Makes `target`'s extended attributes exactly `source`'s. The clone starts with the keeper's,
+    /// so those are cleared first. Attributes the system won't let us remove or set are caught by
+    /// the metadata check afterwards, which then leaves the file alone.
+    static func copyXattrs(from source: String, to target: String) -> Bool {
+        guard let wanted = xattrNames(source), let existing = xattrNames(target) else { return false }
+        for name in existing where !wanted.contains(name) { removexattr(target, name, XATTR_NOFOLLOW) }
+        for name in wanted {
+            guard let value = xattr(source, name) else { return false }
+            if xattr(target, name) == value { continue }
+            _ = value.withUnsafeBytes { setxattr(target, name, $0.baseAddress, value.count, 0, XATTR_NOFOLLOW) }
+        }
+        return true
+    }
+
+    /// Creation, modification, access and "date added" dates, so Finder shows and sorts exactly as before.
     static func copyTimes(from source: String, to target: String) -> Bool {
+        guard let t = times(source) else { return false }
+        var attrs = timeAttrs
+        var values = (t[0], t[1], t[2], t[3])
+        return setattrlist(target, &attrs, &values, MemoryLayout.size(ofValue: values), UInt32(FSOPT_NOFOLLOW)) == 0
+    }
+
+    private static var timeAttrs: attrlist {
         var attrs = attrlist()
         attrs.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrs.commonattr = attrgroup_t(ATTR_CMN_CRTIME) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
-        // The reply is a UInt32 length followed by three timespecs packed at 4-byte alignment,
+            | attrgroup_t(ATTR_CMN_ADDEDTIME)
+        return attrs
+    }
+
+    /// Creation, modification, access and added times, in that order.
+    static func times(_ path: String) -> [timespec]? {
+        var attrs = timeAttrs
+        // The reply is a UInt32 length followed by timespecs packed at 4-byte alignment,
         // so read it as raw bytes rather than through a padded Swift struct.
         let stride = MemoryLayout<timespec>.size
-        var reply = [UInt8](repeating: 0, count: 4 + 3 * stride)
-        guard getattrlist(source, &attrs, &reply, reply.count, UInt32(FSOPT_NOFOLLOW)) == 0 else { return false }
-        let t = reply.withUnsafeBytes { raw in
-            (0..<3).map { raw.loadUnaligned(fromByteOffset: 4 + $0 * stride, as: timespec.self) }
+        var reply = [UInt8](repeating: 0, count: 4 + 4 * stride)
+        guard getattrlist(path, &attrs, &reply, reply.count, UInt32(FSOPT_NOFOLLOW)) == 0 else { return nil }
+        return reply.withUnsafeBytes { raw in
+            (0..<4).map { raw.loadUnaligned(fromByteOffset: 4 + $0 * stride, as: timespec.self) }
         }
-        var values = (t[0], t[1], t[2])
-        return setattrlist(target, &attrs, &values, MemoryLayout.size(ofValue: values), UInt32(FSOPT_NOFOLLOW)) == 0
+    }
+
+    /// Everything about a file except its contents and inode that a person or an app could notice.
+    struct Metadata: Equatable {
+        let mode: mode_t, uid: uid_t, gid: gid_t, flags: UInt32
+        let created: Int, modified: Int, modifiedNanos: Int, added: Int
+        let xattrs: [String: [UInt8]]
+        let acl: String?
+    }
+
+    /// What differs between two files' metadata, for the reason shown when a file is left alone.
+    static func difference(_ a: Metadata, _ b: Metadata) -> String {
+        var parts: [String] = []
+        if a.mode != b.mode { parts.append("permissions") }
+        if a.uid != b.uid || a.gid != b.gid { parts.append("owner") }
+        if a.flags != b.flags { parts.append("flags") }
+        if a.created != b.created || a.modified != b.modified || a.modifiedNanos != b.modifiedNanos { parts.append("dates") }
+        if a.added != b.added { parts.append("date added") }
+        if a.acl != b.acl { parts.append("ACL") }
+        for name in Set(a.xattrs.keys).union(b.xattrs.keys).sorted() where a.xattrs[name] != b.xattrs[name] {
+            parts.append(name)
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    static func metadata(_ path: String) -> Metadata? {
+        var st = Darwin.stat()
+        guard Darwin.lstat(path, &st) == 0, let t = times(path) else { return nil }
+        guard let names = xattrNames(path) else { return nil }
+        var xattrs: [String: [UInt8]] = [:]
+        for name in names {
+            guard let value = xattr(path, name) else { return nil }
+            xattrs[name] = value
+        }
+        var acl: String?
+        if let a = acl_get_link_np(path, ACL_TYPE_EXTENDED) {
+            if let text = acl_to_text(a, nil) { acl = String(cString: text); acl_free(UnsafeMutableRawPointer(text)) }
+            acl_free(UnsafeMutableRawPointer(a))
+        }
+        return Metadata(mode: st.st_mode, uid: st.st_uid, gid: st.st_gid, flags: st.st_flags,
+                        created: t[0].tv_sec, modified: t[1].tv_sec, modifiedNanos: t[1].tv_nsec, added: t[3].tv_sec,
+                        xattrs: xattrs, acl: acl)
+    }
+
+    /// Removes one of Twinfold's own temporary clones, even if it already carries a "deny delete" ACL or a lock flag
+    /// copied from the original.
+    static func removeTemp(_ path: String) {
+        guard (path as NSString).lastPathComponent.hasPrefix(".twinfold-") else { return }
+        if unlink(path) == 0 || errno == ENOENT { return }
+        _ = lchflags(path, 0)
+        if let empty = acl_init(0) {
+            _ = acl_set_link_np(path, ACL_TYPE_EXTENDED, empty)
+            acl_free(UnsafeMutableRawPointer(empty))
+        }
+        unlink(path)
+    }
+
+    /// Whether the file carries an ACL rule that denies something, which we read as "leave this alone".
+    static func hasDenyRule(_ path: String) -> Bool {
+        guard let a = acl_get_link_np(path, ACL_TYPE_EXTENDED) else { return false }
+        defer { acl_free(UnsafeMutableRawPointer(a)) }
+        guard let text = acl_to_text(a, nil) else { return false }
+        defer { acl_free(UnsafeMutableRawPointer(text)) }
+        return String(cString: text).contains(":deny")
+    }
+
+    struct FileID: Hashable { let device: Int64; let inode: UInt64 }
+
+    /// Every file some process we can see has open for writing. A file swapped while a program is writing to it
+    /// would lose that program's later writes, so those are left alone.
+    static func filesOpenForWriting() -> Set<FileID> {
+        var found = Set<FileID>()
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return found }
+        var pids = [pid_t](repeating: 0, count: Int(count) + 64)
+        let n = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        let fdSize = MemoryLayout<proc_fdinfo>.stride
+        for pid in pids.prefix(Int(max(n, 0))) where pid > 0 {
+            let bytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+            guard bytes > 0 else { continue }
+            var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(bytes) / fdSize + 32)
+            let got = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &fds, Int32(fds.count * fdSize))
+            guard got > 0 else { continue }
+            for fd in fds.prefix(Int(got) / fdSize) where fd.proc_fdtype == UInt32(PROX_FDTYPE_VNODE) {
+                var info = vnode_fdinfowithpath()
+                let size = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+                guard proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDVNODEPATHINFO, &info, size) == size,
+                      info.pfi.fi_openflags & UInt32(FWRITE) != 0 else { continue }
+                let st = info.pvip.vip_vi.vi_stat
+                found.insert(FileID(device: Int64(st.vst_dev), inode: st.vst_ino))
+            }
+        }
+        return found
     }
 }

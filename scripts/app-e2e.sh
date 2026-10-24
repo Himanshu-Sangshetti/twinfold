@@ -13,6 +13,7 @@ TMP=$(realpath "$(mktemp -d)")
 trap 'rm -rf "$TMP"' EXIT
 FIX=$TMP/fixture OUT=$TMP/out
 export TWINFOLD_SUPPORT_DIR=$TMP/support
+export TWINFOLD_QUIET_SECONDS=0
 mkdir -p "$FIX" "$OUT"
 
 # 0keep holds the originals (sorts first, so it is kept); A holds 2 copies of an 80 MB file, B one copy of 40 MB.

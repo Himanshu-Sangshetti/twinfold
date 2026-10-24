@@ -16,7 +16,7 @@ def hashes():
     return {r: hashlib.sha256(open(os.path.join(fix, r), "rb").read()).hexdigest() for r in ["a/model.bin", "b/model.bin", "c/model.bin"]}
 before = hashes()
 
-env = dict(os.environ, TWINFOLD_SUPPORT_DIR=os.path.join(tmp, "support"))
+env = dict(os.environ, TWINFOLD_SUPPORT_DIR=os.path.join(tmp, "support"), TWINFOLD_QUIET_SECONDS="0")
 server = subprocess.Popen([binary, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 next_id = 0
 def rpc(method, params=None):
