@@ -58,6 +58,8 @@ enum Snapshot {
         model.phase = .folding
         await shot("5-folding")
         model.freedBytes = model.selectedBytes
+        model.foldedFiles = model.selected.count
+        model.foldedBytes = model.selectedBytes
         model.example = model.breakdown?.groups.first { $0.size * Int64($0.files.count) <= 400_000_000 }
         model.phase = .done
         await shot("6-done")
@@ -107,7 +109,8 @@ enum Snapshot {
                                "journal": model.journal?.path ?? "",
                                "proofStored": model.check?.storedCopies ?? -1,
                                "proofIdentical": model.check?.allIdentical == true ? 1 : 0,
-                               "proofMissing": model.check?.missing ?? -1])
+                               "proofMissing": model.check?.missing ?? -1,
+                               "foldedFiles": model.foldedFiles, "foldedBytes": model.foldedBytes])
 
         let go = out.appendingPathComponent("continue")
         for _ in 0..<600 where !FileManager.default.fileExists(atPath: go.path) {

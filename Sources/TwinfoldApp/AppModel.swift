@@ -45,6 +45,8 @@ final class AppModel {
     var foldTotal = 0
     var freedBytes: Int64 = 0
     var problems = 0
+    var foldedFiles = 0
+    var foldedBytes: Int64 = 0
     var journal: URL?
     // Remembered choices, past runs, and Pro (Automatic mode).
     private(set) var settings = Settings.load()
@@ -323,6 +325,8 @@ final class AppModel {
                 self.foldedCount = self.foldTotal
                 self.freedBytes = max(summary.freeAfter - summary.freeBefore, 0)
                 self.problems = summary.results.count - summary.folded.count
+                self.foldedFiles = summary.folded.count
+                self.foldedBytes = summary.foldedBytes
                 self.journal = summary.journal
                 self.runs = Run.all()
                 self.phase = .done

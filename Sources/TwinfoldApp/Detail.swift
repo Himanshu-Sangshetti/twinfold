@@ -168,6 +168,7 @@ struct StorageDiagram: View {
 struct ProofSection: View {
     @Environment(AppModel.self) private var model
     let group: DuplicateGroup
+    var titled = true
     /// Small sets are checked as soon as they're shown; big ones wait for a click.
     private var automatic: Bool {
         group.size * Int64(group.files.count) <= 400_000_000
@@ -176,7 +177,7 @@ struct ProofSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(text: "Check on disk")
+            if titled { SectionTitle(text: "Check on disk") }
             if let check = model.check {
                 ProofLine(ok: check.missing == 0,
                           text: check.missing == 0

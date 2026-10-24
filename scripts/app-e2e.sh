@@ -48,6 +48,8 @@ check "every file's contents unchanged after freeing" "$(hashes)" "$BEFORE"
 check "done screen proof: example set now stored once" "$(field 3-freed proofStored)" 1
 check "done screen proof: every copy identical" "$(field 3-freed proofIdentical)" 1
 check "done screen proof: no copy missing" "$(field 3-freed proofMissing)" 0
+check "done screen counts the 1 file compared and shared" "$(field 3-freed foldedFiles)" 1
+check "done screen states undo needs 40 MB free" "$(field 3-freed foldedBytes)" 40000000
 check "unticked folder A was left alone (still 160 MB to share)" "$(reclaimable)" 160000000
 
 check "unticked folder is remembered for next time" "$(python3 -I -c "import json; print(json.load(open('$TWINFOLD_SUPPORT_DIR/settings.json'))['leaveAlone'])")" "['$FIX/A']"

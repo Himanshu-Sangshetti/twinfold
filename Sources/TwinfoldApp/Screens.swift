@@ -390,6 +390,10 @@ struct DoneView: View {
                 .font(.system(size: 56, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.fold)
             Lede(text: "of disk space back. Every file is still where it was.")
+            Label("All \(Format.count(model.foldedFiles, "file was", "files were")) compared byte for byte with their twin right before sharing space.",
+                  systemImage: "checkmark.seal")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.fold)
             if model.problems > 0 {
                 Text("\(model.problems.formatted()) files changed while we worked, so we left them alone.")
                     .font(.system(size: 13)).foregroundStyle(Color.quiet)
@@ -398,7 +402,7 @@ struct DoneView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("See for yourself: \((example.keeper as NSString).lastPathComponent)")
                         .font(.system(size: 13, weight: .semibold))
-                    ProofSection(group: example)
+                    ProofSection(group: example, titled: false)
                     Button("Show all \(example.files.count) copies in Finder") { model.reveal(example.files) }
                         .buttonStyle(.link)
                         .font(.system(size: 12))
@@ -413,7 +417,7 @@ struct DoneView: View {
                 PrimaryButton(title: "Done") { model.reset() }
             }
             .padding(.top, 4)
-            Text("Undo gives every file its own copy again. You can also undo it later from History.")
+            Text("Undo gives every file its own copy again, which needs \(Format.bytes(model.foldedBytes)) of free space. It stays available later in History.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.quiet)
         }
