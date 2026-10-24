@@ -210,6 +210,16 @@ final class AppModel {
 
     var totalSaved: Int64 { runs.reduce(0) { $0 + $1.bytes } }
 
+    /// A cautious first step: just the biggest selected set, so people can see it work before saving everything.
+    var trialBatch: [Copy] {
+        guard let first = selected.first?.group else { return [] }
+        return selected.filter { $0.group == first }
+    }
+    var trialName: String {
+        guard let g = trialBatch.first?.group, let group = breakdown?.groups[g] else { return "" }
+        return (group.keeper as NSString).lastPathComponent
+    }
+
     func activate(_ key: String) {
         activating = true
         activationError = nil

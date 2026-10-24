@@ -300,9 +300,15 @@ struct ResultsView: View {
                                 isPresented: $confirming
                             ) {
                                 Button("Save \(Format.bytes(model.selectedBytes))") { model.fold() }
+                                if model.trialBatch.count < model.selected.count {
+                                    let trial = model.trialBatch
+                                    Button("Try one set first: \(model.trialName), \(Format.bytes(trial.reduce(0) { $0 + $1.size }))") {
+                                        model.fold(trial)
+                                    }
+                                }
                                 Button("Cancel", role: .cancel) {}
                             } message: {
-                                Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards, from History too.")
+                                Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards, from History too. Not sure yet? Try one set first and check it.")
                             }
                         HStack(spacing: 6) {
                             if let date = model.scannedAt {

@@ -41,6 +41,7 @@ APP=$!
 
 waitfor 3-freed.json
 check "app scan finds 200 MB" "$(field 1-scanned reclaimable)" 200000000
+check "\"try one set first\" offers just the biggest set (2 copies of the 80 MB file)" "$(field 1-scanned trial)" 160000000
 check "unticking folder A leaves 40 MB selected" "$(field 2-unticked selected)" 40000000
 check "app reports no problems" "$(field 3-freed problems)" 0
 atleast "app measured at least 36 MB freed" "$(field 3-freed freed)" 36000000

@@ -95,7 +95,8 @@ enum Snapshot {
         model.roots = roots.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         model.scan()
         await wait(for: .results)
-        await step("1-scanned", ["reclaimable": model.selectedBytes, "copies": model.selected.count])
+        await step("1-scanned", ["reclaimable": model.selectedBytes, "copies": model.selected.count,
+                                  "trial": model.trialBatch.reduce(0) { $0 + $1.size }])
 
         let biggest = model.breakdown?.tree(model.visibleCopies).children.first?.path ?? ""
         model.toggle(folder: biggest)
