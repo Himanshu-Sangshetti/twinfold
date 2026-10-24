@@ -518,8 +518,14 @@ struct AutomaticSheet: View {
                     Text("Every week").tag(Settings.Frequency.weekly)
                 }
                 .pickerStyle(.segmented)
+                FolderSettingsList(title: "Watched folders", paths: model.settings.watched,
+                                   empty: "No folders yet. Add one so Automatic has something to check.",
+                                   remove: model.removeWatched)
+                Button("Add Folder…") { model.addWatchedFolders() }.controlSize(.small)
+                FolderSettingsList(title: "Always left alone", paths: model.settings.leaveAlone,
+                                   empty: "Nothing yet. Untick a folder in the results and it shows up here.",
+                                   remove: model.removeLeaveAlone)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Watches \(model.settings.watched.map { Format.path($0) }.joined(separator: ", ")), leaving \(Format.count(model.settings.leaveAlone.count, "folder", "folders")) alone.")
                     if let last = model.settings.lastAutoRun {
                         Text("Last run \(last.formatted(.relative(presentation: .named))): saved \(Format.bytes(model.settings.lastAutoSaved)).")
                     }
@@ -605,4 +611,32 @@ struct MenuBarContent: View {
 
 extension Support {
     static let sponsorURL = URL(string: "https://github.com/sponsors/Himanshu-Sangshetti")!
+}
+
+/// A short list of folders with a remove button each, used in the Automatic sheet.
+struct FolderSettingsList: View {
+    let title: String
+    let paths: [String]
+    let empty: String
+    let remove: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 13, weight: .semibold))
+            if paths.isEmpty {
+                Text(empty).font(.system(size: 12)).foregroundStyle(Color.quiet)
+            }
+            ForEach(paths, id: \.self) { path in
+                HStack(spacing: 8) {
+                    Image(nsImage: Icons.folder).resizable().frame(width: 16, height: 16)
+                    Text(Format.path(path)).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button { remove(path) } label: { Image(systemName: "minus.circle") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.quiet)
+                        .accessibilityLabel("Remove \(Format.path(path))")
+                }
+            }
+        }
+    }
 }

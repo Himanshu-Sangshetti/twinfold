@@ -55,6 +55,8 @@ touch "$OUT/continue"
 wait $APP
 check "undo finished and shows History" "$(field 4-undone phase)" history
 check "undo says what it restored" "$(field 4-undone message)" "1 file has its own copy again."
+check "removing a left-alone folder in Automatic settings forgets it" "$(field 5-settings leaveAlone)" 0
+check "and ticks it again in the results" "$(field 5-settings stillUnticked)" 0
 check "every file's contents unchanged after undo" "$(hashes)" "$BEFORE"
 check "after undo all 200 MB is separate again" "$(reclaimable)" 200000000
 

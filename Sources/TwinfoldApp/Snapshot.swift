@@ -116,6 +116,9 @@ enum Snapshot {
         model.undo()
         await wait(for: .history)
         await step("4-undone", ["message": model.undoMessage ?? ""])
+        model.removeLeaveAlone(biggest)
+        await step("5-settings", ["leaveAlone": model.settings.leaveAlone.count,
+                                  "stillUnticked": model.isIncluded(folder: biggest) ? 0 : 1])
         exit(0)
     }
 

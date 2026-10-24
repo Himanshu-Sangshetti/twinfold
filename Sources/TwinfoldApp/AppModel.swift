@@ -229,11 +229,33 @@ final class AppModel {
     func setAutomatic(_ frequency: Settings.Frequency) {
         guard entitlement.unlocked || frequency == .off else { return }
         settings.automatic = frequency
-        settings.watched = roots.map(\.path)
         settings.save()
         if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app") {
             try? LaunchAgent.install(executable: exe, frequency: frequency)
         }
+    }
+
+    func addWatchedFolders() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Watch"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls where !settings.watched.contains(url.path) { settings.watched.append(url.path) }
+        settings.save()
+    }
+
+    func removeWatched(_ path: String) {
+        settings.watched.removeAll { $0 == path }
+        settings.save()
+    }
+
+    /// Stops leaving a folder alone (it can be shared again in scans and automatic runs).
+    func removeLeaveAlone(_ path: String) {
+        settings.leaveAlone.removeAll { $0 == path }
+        excludedFolders.remove(path)
+        settings.save()
     }
 
     func runAutomaticNow() {
