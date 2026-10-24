@@ -202,6 +202,7 @@ struct TopBar: View {
             }
             GlassButton(title: model.settings.automatic == .off ? "Automatic" : "Automatic: \(model.settings.automatic.rawValue.capitalized)",
                         icon: "sparkles") { model.showingAutomatic = true }
+                .help("Pro: keep saving space by itself, every night or week")
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -217,7 +218,10 @@ struct IdleView: View {
             FoldAnimation()
                 .padding(.bottom, 4)
             Headline(text: "Get disk space back\nwithout removing any files.")
-            Lede(text: "Twinfold finds files that are exactly the same and stores their data once. Every file stays in its folder and keeps working. You see everything before anything changes.")
+            Lede(text: "Twinfold finds files that are exactly the same and stores their data once. Every file stays in its folder and keeps working.")
+            Text("Scanning only reads files and takes about a minute. Nothing changes until you press Save.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.quiet)
             HStack(spacing: 10) {
                 PrimaryButton(title: "Scan \(model.rootName)") { model.scan() }
                 GlassButton(title: "Choose Folders…") { model.chooseFolders() }
@@ -303,14 +307,16 @@ struct SimpleResults: View {
                 Text(Format.bytes(model.selectedBytes))
                     .font(.system(size: 60, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
-                Text("is stored twice on your disk.")
+                Text("is taken up by exact duplicate copies.")
                     .font(.system(size: 17))
                     .foregroundStyle(Color.quiet)
             }
             SaveButton()
-            Label("Nothing is removed. Every file keeps working. Undo any time.", systemImage: "checkmark.shield")
+            Label("Nothing is removed. All \(model.selected.count.formatted()) files are checked byte for byte before they change, and you can undo it.",
+                  systemImage: "checkmark.shield")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.fold)
+                .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
                 ForEach(top.prefix(6)) { node in
                     let included = model.isIncluded(folder: node.path)
@@ -334,7 +340,7 @@ struct SimpleResults: View {
             }
             .padding(.top, 8)
             HStack(spacing: 16) {
-                GlassButton(title: "Review every file", icon: "list.bullet") { model.detailed = true }
+                GlassButton(title: "See exactly what changes", icon: "list.bullet") { model.detailed = true }
                 QuietButton(title: "Rescan") { model.scan() }
                 HowItWorksButton()
             }

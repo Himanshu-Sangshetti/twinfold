@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Simple by default: after a scan you see the number, one Save button, a line saying every file is checked byte for byte and can be undone, and the top folders with checkboxes. "See exactly what changes" opens the full review.
+- Agent native: `twinfold mcp` is an MCP server for Claude Code, Claude Desktop and Cursor (scan, list and explain sets, check files on disk, save, history, undo; saving and undoing need an explicit confirm).
+- Save dialog: "Try one set first".
+- Files tab: search and sort.
+- Keyboard and VoiceOver: arrow keys move through lists, labels on checkboxes and icon buttons, Esc closes sheets.
+- Start screen says scanning only reads files and nothing changes until you press Save.
+- Homebrew cask and formula (packaging/homebrew), and a landing page in docs/.
+
 ## 0.4.0
 
 - Undo is safer: it skips files deleted since, stops before the disk gets too full, keeps the rest, and finishes when you undo that run again. History shows what each undo did.
