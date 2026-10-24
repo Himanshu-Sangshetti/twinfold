@@ -1,8 +1,8 @@
 cask "twinfold" do
-  version "0.6.0"
-  sha256 "1f3c68efdbd0b56d213125572515714ee4b89ba55976ec00415c0df613d8ef17"
+  version "0.7.0"
+  sha256 "3e571d35b4e45c279c07a067ef1eca1189f5fb539299907c6a8b98d707933461"
 
-  url "https://github.com/Himanshu-Sangshetti/twinfold/releases/download/v0.6.0/Twinfold-#{version}.zip"
+  url "https://github.com/Himanshu-Sangshetti/twinfold/releases/download/v0.7.0/Twinfold-#{version}.zip"
   name "Twinfold"
   desc "Get disk space back without removing files: identical files share storage (APFS clones)"
   homepage "https://himanshu-sangshetti.github.io/twinfold/"

@@ -1,8 +1,8 @@
 class Twinfold < Formula
   desc "Free disk space by letting identical files share storage (APFS clones), undoable"
   homepage "https://github.com/Himanshu-Sangshetti/twinfold"
-  url "https://github.com/Himanshu-Sangshetti/twinfold/releases/download/v0.6.0/twinfold-0.6.0-macos.tar.gz"
-  sha256 "1eec6a6cffb739eaf4e99a84ce273d95e6855b1ecd2fa677147721cc9b4950c2"
+  url "https://github.com/Himanshu-Sangshetti/twinfold/releases/download/v0.7.0/twinfold-0.7.0-macos.tar.gz"
+  sha256 "0c0a4fd57e75cc38b9c13d501fecd274261fd574c19679bb618d6423209d0c46"
   license "MIT"
 
   depends_on :macos
