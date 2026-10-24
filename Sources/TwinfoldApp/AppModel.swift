@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import UserNotifications
 import TwinfoldCore
 
 @MainActor @Observable
@@ -230,6 +231,10 @@ final class AppModel {
         guard entitlement.unlocked || frequency == .off else { return }
         settings.automatic = frequency
         settings.save()
+        if frequency != .off {
+            // Ask once, now, so the overnight run can say what it saved.
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
+        }
         if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app") {
             try? LaunchAgent.install(executable: exe, frequency: frequency)
         }
