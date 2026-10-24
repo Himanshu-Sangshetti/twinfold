@@ -213,8 +213,9 @@ struct TopBar: View {
 struct IdleView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        Card {
-            AppIcon().frame(width: 96, height: 96)
+        Card(width: 520) {
+            FoldAnimation()
+                .padding(.bottom, 4)
             Headline(text: "Get disk space back\nwithout removing any files.")
             Lede(text: "Twinfold finds files that are exactly the same and stores their data once. Every file stays in its folder and keeps working. You see everything before anything changes.")
             HStack(spacing: 10) {
