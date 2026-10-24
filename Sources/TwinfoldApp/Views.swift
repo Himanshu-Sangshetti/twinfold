@@ -141,7 +141,7 @@ struct FolderRow: View {
                 .truncationMode(.middle)
                 .foregroundStyle(included ? Color.primary : Color.quiet)
             Spacer(minLength: 16)
-            Text(Format.count(node.copies, "file", "files"))
+            Text(Format.count(node.copies, "duplicate", "duplicates"))
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
             SizeBar(fraction: Double(node.bytes) / Double(total), muted: !included)

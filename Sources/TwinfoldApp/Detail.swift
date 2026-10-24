@@ -234,18 +234,18 @@ struct FolderDetail: View {
         let groups = model.groups(in: path)
         let all = model.breakdown?.groups ?? []
         let prefix = path + "/"
-        // Where the twins of this folder's files live, outside it.
+        // The same count as the folder list: duplicates (copies that would share space) inside this folder.
+        let dupes = model.visibleCopies.filter { $0.path.hasPrefix(prefix) }
+        let dupeBytes = dupes.reduce(Int64(0)) { $0 + $1.size }
+        // Every place the sets touching this folder live, inside or outside it, three folders deep.
         var places: [String: Int] = [:]
-        var here = 0, inside = 0
         for g in groups {
-            let mine = all[g].files.filter { $0.hasPrefix(prefix) }.count
-            here += mine
-            if mine > 1 { inside += 1 }
-            for p in Set(all[g].files.filter { !$0.hasPrefix(prefix) }.map { model.place(of: $0) }) {
-                places[p, default: 0] += 1
-            }
+            for p in Set(all[g].files.map { model.place(of: $0, depth: 3) }) { places[p, default: 0] += 1 }
         }
-        let topPlaces = places.sorted { $0.value > $1.value }.prefix(8)
+        let topPlaces = places.sorted { $0.value > $1.value }.prefix(10)
+        // This folder in the same "relative to the scan" form, to mark places inside it.
+        let root = model.breakdown?.root ?? ""
+        let here = path.hasPrefix(root + "/") ? String(path.dropFirst(root.count + 1)) : path
 
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
@@ -263,16 +263,16 @@ struct FolderDetail: View {
                 .help("Show in Finder")
             }
 
-            Text("\(Format.count(here, "file in this folder has", "files in this folder have")) an exact copy somewhere else.")
+            Text("\(Format.count(dupes.count, "duplicate", "duplicates")) here, \(Format.bytes(dupeBytes)). Each is an exact copy of a file in one of these places:")
                 .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
 
-            if !topPlaces.isEmpty || inside > 0 {
+            if !topPlaces.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionTitle(text: "Files here have an exact copy in")
-                    if inside > 0 {
-                        PlaceRow(name: "inside this folder", count: inside)
+                    SectionTitle(text: "Where the identical files are")
+                    ForEach(topPlaces, id: \.key) { place, count in
+                        PlaceRow(name: place, count: count, inside: place == here || place.hasPrefix(here + "/"))
                     }
-                    ForEach(topPlaces, id: \.key) { place, count in PlaceRow(name: place, count: count) }
                 }
             }
 
@@ -307,12 +307,14 @@ struct FolderDetail: View {
 struct PlaceRow: View {
     let name: String
     let count: Int
+    var inside = false
     var body: some View {
         HStack {
-            Image(systemName: "folder").foregroundStyle(Color.quiet).font(.system(size: 11))
+            Image(systemName: inside ? "folder.fill" : "folder").foregroundStyle(inside ? Color.fold : Color.quiet)
+                .font(.system(size: 11))
             Text(name).lineLimit(1).truncationMode(.middle)
             Spacer()
-            Text(Format.count(count, "match", "matches")).foregroundStyle(Color.quiet)
+            Text(Format.count(count, "set", "sets")).foregroundStyle(Color.quiet)
         }
         .font(.system(size: 12).monospacedDigit())
     }
