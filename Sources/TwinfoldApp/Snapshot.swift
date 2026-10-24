@@ -26,12 +26,14 @@ enum Snapshot {
             model.show(report, at: Date().addingTimeInterval(-3 * 3600))
         }
         func shot(_ name: String) async {
-            try? await Task.sleep(for: .milliseconds(900))
+            try? await Task.sleep(for: .milliseconds(2000))
             guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
                   let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("\(name).png"))
         }
+        write(HowItWorks().padding(22).frame(width: 380).background(Color(white: 0.16))
+                .environment(\.colorScheme, .dark), to: out.appendingPathComponent("7-how-it-works.png"))
         await shot("1-folders")
         model.tab = .files
         await shot("2-files")
@@ -51,6 +53,53 @@ enum Snapshot {
         model.phase = .idle
         try? await Task.sleep(for: .milliseconds(800))
         await shot("0-idle")
+        exit(0)
+    }
+
+    /// `TWINFOLD_AUTOPILOT=<dir> TWINFOLD_ROOTS=<folder>` drives the real window through the same actions the
+    /// buttons call: scan, untick the biggest folder, free, then (once `<dir>/continue` exists) undo.
+    /// Between steps it writes `<dir>/<step>.json` and a screenshot so scripts/app-e2e.sh can check the disk.
+    static func autopilot(_ model: AppModel) async {
+        let env = ProcessInfo.processInfo.environment
+        guard let dir = env["TWINFOLD_AUTOPILOT"], let roots = env["TWINFOLD_ROOTS"] else { return }
+        let out = URL(fileURLWithPath: dir)
+        func wait(for phase: AppModel.Phase) async {
+            for _ in 0..<1200 where model.phase != phase { try? await Task.sleep(for: .milliseconds(100)) }
+        }
+        func step(_ name: String, _ info: [String: Any]) async {
+            try? await Task.sleep(for: .milliseconds(700))
+            if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
+               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("\(name).png"))
+            }
+            var info = info
+            info["phase"] = "\(model.phase)"
+            try? JSONSerialization.data(withJSONObject: info).write(to: out.appendingPathComponent("\(name).json"))
+        }
+
+        model.reset()
+        model.roots = roots.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
+        model.scan()
+        await wait(for: .results)
+        await step("1-scanned", ["reclaimable": model.selectedBytes, "copies": model.selected.count])
+
+        let biggest = model.breakdown?.tree(model.visibleCopies).children.first?.path ?? ""
+        model.toggle(folder: biggest)
+        await step("2-unticked", ["unticked": biggest, "selected": model.selectedBytes])
+
+        model.fold()
+        await wait(for: .done)
+        await step("3-freed", ["freed": model.freedBytes, "problems": model.problems,
+                               "journal": model.journal?.path ?? ""])
+
+        let go = out.appendingPathComponent("continue")
+        for _ in 0..<600 where !FileManager.default.fileExists(atPath: go.path) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        model.undo()
+        await wait(for: .idle)
+        await step("4-undone", [:])
         exit(0)
     }
 

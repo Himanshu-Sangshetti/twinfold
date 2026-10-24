@@ -163,7 +163,7 @@ struct IdleView: View {
         Centered {
             AppIcon().frame(width: 112, height: 112)
             Headline(text: "Free up space.\nDelete nothing.")
-            Lede(text: "Twinfold finds identical files and lets them share one copy on disk. Every file stays exactly where it is, and you see everything before anything changes.")
+            Lede(text: "Twinfold finds files that are exactly the same and stores their data once, using Apple's built-in file cloning. Every file stays in its folder, opens normally and can still be changed on its own. You see everything before anything changes.")
             Spacer().frame(height: 8)
             PrimaryButton(title: "Scan \(model.rootName)") { model.scan() }
             QuietButton(title: "Choose Folders…") { model.chooseFolders() }
@@ -197,6 +197,7 @@ struct ScanningView: View {
 
 struct ResultsView: View {
     @Environment(AppModel.self) private var model
+    @State private var confirming = false
 
     var body: some View {
         @Bindable var model = model
@@ -207,16 +208,30 @@ struct ResultsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(Format.bytes(model.selectedBytes))
                         .font(.system(size: 44, weight: .semibold, design: .rounded))
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: model.selectedBytes)
-                    Text("can be freed by letting \(model.selected.count.formatted()) identical files share space. Every file stays.")
+                    Text(model.selectedBytes < model.totalBytes
+                        ? "selected of \(Format.bytes(model.totalBytes)) found. \(Format.count(model.selected.count, "identical file", "identical files")) will share space."
+                        : "can be freed by letting \(Format.count(model.selected.count, "identical file", "identical files")) share space.")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.quiet)
+                    Label("Every file stays where it is. Photos and Music libraries, iCloud and system files are never touched.",
+                          systemImage: "checkmark.shield")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.quiet)
+                        .padding(.top, 4)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 10) {
                     PrimaryButton(title: "Free \(Format.bytes(model.selectedBytes))",
-                                  disabled: model.selectedBytes == 0) { model.fold() }
+                                  disabled: model.selectedBytes == 0) { confirming = true }
+                        .confirmationDialog(
+                            "Let \(Format.count(model.selected.count, "identical file", "identical files")) share space?",
+                            isPresented: $confirming
+                        ) {
+                            Button("Free \(Format.bytes(model.selectedBytes))") { model.fold() }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("No file is deleted, moved or renamed, and each keeps its own dates and permissions. Every file is checked byte for byte first. You can undo this afterwards.")
+                        }
                     HStack(spacing: 6) {
                         if let date = model.scannedAt {
                             Text("Scanned \(date.formatted(.relative(presentation: .named)))")
@@ -247,7 +262,9 @@ struct ResultsView: View {
                 .labelsHidden()
                 .fixedSize()
                 Spacer()
-                Text("Untick anything you'd rather leave alone.")
+                Text(model.kindFilter == nil
+                    ? "Untick anything you'd rather leave alone."
+                    : "Showing \(model.kindFilter!.rawValue.lowercased()) only. Free still covers everything ticked.")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                 HowItWorksButton()
@@ -330,7 +347,7 @@ struct FolderRow: View {
                 .truncationMode(.middle)
                 .foregroundStyle(included ? Color.primary : Color.quiet)
             Spacer(minLength: 16)
-            Text("\(node.copies.formatted()) copies")
+            Text(Format.count(node.copies, "copy", "copies"))
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
             SizeBar(fraction: Double(node.bytes) / Double(total), muted: !included)
@@ -421,7 +438,9 @@ struct FileGroupRow: View {
                 }
                 .foregroundStyle(included ? Color.primary : Color.quiet)
                 Spacer(minLength: 16)
-                Text("\((group.clusters.count - 1).formatted()) \(group.clusters.count == 2 ? "copy" : "copies") × \(Format.bytes(group.size))")
+                Text("\(Format.count(group.clusters.count - 1, "copy", "copies")) × \(Format.bytes(group.size))"
+                    + (group.files.count > group.clusters.count
+                        ? " · \(group.files.count - group.clusters.count) already sharing" : ""))
                     .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(.tertiary)
                 Text(Format.bytes(group.reclaimableBytes))
@@ -473,8 +492,15 @@ struct DoneView: View {
                     .font(.system(size: 13))
             }
             Spacer().frame(height: 10)
-            PrimaryButton(title: "Done") { model.reset() }
-            QuietButton(title: "Undo") { model.undo() }
+            HStack(spacing: 12) {
+                Button("Undo") { model.undo() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                PrimaryButton(title: "Done") { model.reset() }
+            }
+            Text("Undo gives every file its own copy of its data again.")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
         }
     }
 }
@@ -539,9 +565,8 @@ struct HowItWorks: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Nothing is removed").font(.system(size: 15, weight: .semibold))
             Text("Twinfold only touches files that are identical, byte for byte. Each one stays in its folder with its own name, dates and permissions. They simply stop storing the same data on disk twice.")
-            Text("If you change one later, only that one changes. macOS gives it its own copy of the edited parts automatically.")
+            Text("It uses APFS clones, the same feature Finder uses when you duplicate a file. If you change one file later, only that one changes: macOS gives it its own copy of the edited parts automatically.")
             Text("Good to know: after sharing, deleting one copy frees less space than Finder shows, because its twins still use that data.")
-                .foregroundStyle(Color.quiet)
             Text("Changed your mind? Undo gives every file its own copy again.")
                 .foregroundStyle(Color.quiet)
         }

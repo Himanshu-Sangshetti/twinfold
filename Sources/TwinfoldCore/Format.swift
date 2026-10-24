@@ -14,6 +14,11 @@ public enum Format {
         return v >= 100 ? String(format: "%.0f %@", v, units[i]) : String(format: "%.1f %@", v, units[i])
     }
 
+    /// "1 copy", "12 copies": the count, formatted, with the right word.
+    public static func count(_ n: Int, _ one: String, _ many: String) -> String {
+        "\(n.formatted()) \(n == 1 ? one : many)"
+    }
+
     /// Parses "64K", "10MB", "1.5G" or a plain byte count.
     public static func parseSize(_ text: String) -> Int64? {
         let t = text.uppercased().replacingOccurrences(of: "B", with: "")

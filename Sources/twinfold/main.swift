@@ -107,7 +107,7 @@ func printReport(_ report: ScanReport, top: Int) {
     }
     let copies = actionable.reduce(0) { $0 + $1.clusters.count - 1 }
     print("  \(Format.bytes(report.reclaimableBytes)) can be freed, nothing deleted.")
-    print("  \(copies.formatted()) identical files can share space, in \(actionable.count.formatted()) sets"
+    print("  \(Format.count(copies, "identical file", "identical files")) can share space, in \(Format.count(actionable.count, "set", "sets"))"
         + " · \(report.filesScanned.formatted()) files checked in \(Int(report.seconds))s")
     if report.alreadySharedBytes > 0 {
         print("  (\(Format.bytes(report.alreadySharedBytes)) of identical files already share space)")

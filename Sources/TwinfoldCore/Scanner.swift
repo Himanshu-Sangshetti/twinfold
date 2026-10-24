@@ -55,8 +55,7 @@ public struct ScanReport: Sendable, Codable {
 
     /// Where the app keeps the last scan, so results survive a relaunch.
     public static var savedURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Twinfold/last-scan.json")
+        Support.directory.appendingPathComponent("last-scan.json")
     }
 
     public func save(to url: URL = ScanReport.savedURL) {

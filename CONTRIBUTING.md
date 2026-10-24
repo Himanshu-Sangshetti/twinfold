@@ -7,7 +7,9 @@ Thanks for helping. Twinfold touches people's files, so the bar for safety is hi
 ```sh
 git clone https://github.com/Himanshu-Sangshetti/twinfold && cd twinfold
 swift build
-scripts/test.sh          # runs the tests (works with Xcode or just the Command Line Tools)
+scripts/test.sh          # unit tests (works with Xcode or just the Command Line Tools)
+scripts/e2e.sh           # command line, end to end, on a generated folder
+scripts/app-e2e.sh       # the app, end to end: scan, untick, free, undo
 swift run TwinfoldApp    # runs the app
 swift run twinfold scan ~/Downloads
 ```

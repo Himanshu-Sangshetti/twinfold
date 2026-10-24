@@ -97,17 +97,13 @@ public struct Journal: Sendable {
     public init(url: URL) { self.url = url }
 
     public static func standard() -> Journal {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Twinfold/journal", isDirectory: true)
+        let dir = directory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         return Journal(url: dir.appendingPathComponent("\(stamp).jsonl"))
     }
 
-    public static var directory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Twinfold/journal", isDirectory: true)
-    }
+    public static var directory: URL { Support.directory.appendingPathComponent("journal", isDirectory: true) }
 
     func record(_ result: FoldResult) {
         guard var line = try? JSONEncoder().encode(result) else { return }
@@ -145,5 +141,16 @@ public enum Unfolder {
             return false
         }
         return true
+    }
+}
+
+/// Where Twinfold keeps its journal and last scan. `TWINFOLD_SUPPORT_DIR` overrides it (used by tests).
+public enum Support {
+    public static var directory: URL {
+        if let dir = ProcessInfo.processInfo.environment["TWINFOLD_SUPPORT_DIR"] {
+            return URL(fileURLWithPath: dir, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Twinfold", isDirectory: true)
     }
 }
