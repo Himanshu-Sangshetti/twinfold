@@ -82,6 +82,8 @@ public struct Run: Identifiable, Sendable {
         var result = UndoResult()
         var pending = Set(entries.map(\.path))
         var kept: [FoldResult] = []
+        let openFiles = OpenFiles()  // one shared, refreshed every two seconds
+        let resharer = Reclaimer(journal: nil, openFiles: openFiles)
         for (i, entry) in entries.enumerated() {
             defer { progress?(i + 1, entries.count) }
             guard FileSystem.lstat(entry.path) != nil else {
@@ -91,7 +93,7 @@ public struct Run: Identifiable, Sendable {
             }
             // Its partner has its own storage again (or never lost it): share with it, as before the run.
             if let partner = entry.partner, !pending.contains(partner), FileSystem.lstat(partner) != nil,
-               Reclaimer(journal: nil).fold(entry.path, into: partner, size: entry.size, waitForQuiet: false)
+               resharer.fold(entry.path, into: partner, size: entry.size, waitForQuiet: false)
                    .outcome == .folded {
                 result.restored += 1
                 pending.remove(entry.path)
@@ -105,7 +107,7 @@ public struct Run: Identifiable, Sendable {
                 Journal.rewrite(journal, with: rest)
                 return result
             }
-            if Unfolder.unfold(entry.path) {
+            if Unfolder.unfold(entry.path, openFiles: openFiles) {
                 result.restored += 1
                 pending.remove(entry.path)
             } else {

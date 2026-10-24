@@ -48,11 +48,12 @@ public struct Reclaimer {
 
     let journal: Journal?
     let progress: Progress?
-    let openFiles = OpenFiles()
+    let openFiles: OpenFiles
 
-    public init(journal: Journal? = .standard(), progress: Progress? = nil) {
+    public init(journal: Journal? = .standard(), progress: Progress? = nil, openFiles: OpenFiles = OpenFiles()) {
         self.journal = journal
         self.progress = progress
+        self.openFiles = openFiles
     }
 
     public func reclaim(_ groups: [DuplicateGroup]) -> ReclaimSummary {
@@ -160,7 +161,9 @@ public enum Safety {
 }
 
 /// Which files are open for writing, refreshed at most every two seconds during a run.
-final class OpenFiles: @unchecked Sendable {
+public final class OpenFiles: @unchecked Sendable {
+    public init() {}
+
     private var files = Set<FileSystem.FileID>()
     private var checked = Date.distantPast
     private let lock = NSLock()
@@ -221,10 +224,9 @@ public struct Journal: Sendable {
 
 /// Gives a folded file its own private copy of its data again. Costs the space back.
 public enum Unfolder {
-    public static func unfold(_ path: String) -> Bool {
+    public static func unfold(_ path: String, openFiles: OpenFiles = OpenFiles()) -> Bool {
         guard let before = FileSystem.lstat(path), let original = FileSystem.metadata(path) else { return false }
-        let open = OpenFiles()
-        guard !open.isOpenForWriting(before) else { return false }
+        guard !openFiles.isOpenForWriting(before) else { return false }
         let dir = (path as NSString).deletingLastPathComponent
         let temp = "\(dir)/.twinfold-\(UUID().uuidString.prefix(8))"
         Safety.inFlight(temp)
