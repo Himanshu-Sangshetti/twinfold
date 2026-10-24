@@ -9,13 +9,17 @@
 <meta property="og:description" content="Get disk space back on your Mac without removing any files.">
 <meta property="og:image" content="images/results-light.png">
 <link rel="icon" href="images/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f7f6; --ink: #1b1d1c; --quiet: #626866; --line: rgba(0,0,0,.08);
+    --bg: #f6f4f1; --ink: #1b1d1c; --quiet: #626866; --line: rgba(0,0,0,.08);
     --card: rgba(255,255,255,.72); --fold: #1f9e8a; --block: #1f9e8a;
+    --serif: "Instrument Serif", ui-serif, Georgia, serif; --mono: "Geist Mono", ui-monospace, Menlo, monospace;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #151716; --ink: #eef0ef; --quiet: #9aa29f; --line: rgba(255,255,255,.1); --card: rgba(36,39,38,.72); }
+    :root { --bg: #131615; --ink: #eef0ef; --quiet: #9aa29f; --line: rgba(255,255,255,.1); --card: rgba(36,39,38,.72); }
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -30,13 +34,15 @@
   main { max-width: 980px; margin: 0 auto; padding: 0 16px 80px; }
   header { display: flex; align-items: center; gap: 10px; padding: 22px 0; }
   header img { width: 32px; height: 32px; border-radius: 8px; }
-  header b { font-size: 17px; }
+  header b { font: 400 24px var(--serif); }
+  code { font-family: var(--mono); font-size: .9em; }
   header nav { margin-left: auto; display: flex; gap: 18px; }
   header a { color: var(--quiet); text-decoration: none; font-size: 15px; }
   header a:hover { color: var(--ink); }
 
   .hero { text-align: center; padding: 48px 0 24px; }
-  h1 { font: 600 clamp(34px, 6vw, 56px)/1.08 ui-rounded, -apple-system, sans-serif; margin: 0 0 18px; letter-spacing: -.02em; }
+  h1 { font: 400 clamp(44px, 8vw, 84px)/1 var(--serif); margin: 0 0 22px; letter-spacing: -.01em; }
+  h1 em { font-style: italic; }
   .lede { color: var(--quiet); font-size: clamp(17px, 2.2vw, 20px); max-width: 640px; margin: 0 auto 30px; }
   .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .btn { display: inline-block; padding: 13px 26px; border-radius: 999px; font-weight: 600; text-decoration: none; }
@@ -46,8 +52,9 @@
 
   .fold { margin: 44px auto 8px; width: min(440px, 100%); }
   .fold svg { width: 100%; height: auto; overflow: visible; }
-  .fold text { font: 12px ui-monospace, Menlo, monospace; fill: var(--ink); }
+  .fold text { font: 12px var(--mono); fill: var(--ink); }
   .fold .label { font: 600 13px -apple-system, sans-serif; text-anchor: middle; }
+  .fold .label.twice, .fold .label.once { font: italic 18px var(--serif); }
   .fold .chip { fill: var(--line); }
   .fold .link { stroke: var(--quiet); stroke-width: 1.5; stroke-dasharray: 3 3; fill: none; opacity: .6; }
   .b-right { animation: fold 4.4s cubic-bezier(.5,0,.2,1) infinite; }
@@ -63,14 +70,14 @@
   .shot img { display: block; width: 100%; height: auto; }
 
   section { margin: 70px 0; }
-  h2 { font: 600 30px/1.2 ui-rounded, -apple-system, sans-serif; margin: 0 0 14px; letter-spacing: -.01em; }
+  h2 { font: 400 44px/1.1 var(--serif); margin: 0 0 14px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .card h3 { margin: 0 0 6px; font-size: 18px; }
   .card p { margin: 0; color: var(--quiet); font-size: 16px; }
-  .price { font: 600 26px ui-rounded, -apple-system, sans-serif; margin: 4px 0 10px; }
+  .price { font: 400 40px/1.1 var(--serif); margin: 4px 0 10px; }
   ul.plain { margin: 0; padding-left: 18px; color: var(--quiet); }
-  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; font: 14px ui-monospace, Menlo, monospace; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; font: 14px var(--mono); }
   details { border-top: 1px solid var(--line); padding: 14px 0; }
   details summary { cursor: pointer; font-weight: 600; }
   details p { color: var(--quiet); margin: 8px 0 0; }
@@ -91,7 +98,7 @@
   </header>
 
   <div class="hero">
-    <h1>Get disk space back<br>without removing any files.</h1>
+    <h1>Get disk space back<br><em>without removing</em> any files.</h1>
     <p class="lede">Your Mac keeps the same data many times over: the same <code>node_modules</code> in every project, the
       same PyTorch in every virtualenv, the same video in two folders. Twinfold stores it once. Every file stays where
       it is and keeps working.</p>

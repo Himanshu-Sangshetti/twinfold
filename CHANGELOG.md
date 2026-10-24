@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- New type: Instrument Serif for the big numbers and headlines, Geist Mono for file paths (both bundled, SIL Open Font License).
+- A free-space bar shows what saving does to your disk ("Free space 38.4 GB → 50.1 GB"), on the results and done screens.
+- Warmer paper background in light mode, deeper green-black in dark mode; serif titles in the detail pane, History and Automatic.
+- Landing page uses the same fonts.
+
 ## 0.5.0
 
 - Simple by default: after a scan you see the number, one Save button, a line saying every file is checked byte for byte and can be undone, and the top folders with checkboxes. "See exactly what changes" opens the full review.

@@ -87,6 +87,18 @@ final class AppModel {
             : "\(roots.count) Folders"
     }
 
+    // The disk the scan is on, for the free-space bar.
+    private(set) var diskTotal: Int64 = 0
+    private(set) var diskFree: Int64 = 0
+
+    func refreshDisk() {
+        let url = roots.first ?? FileManager.default.homeDirectoryForCurrentUser
+        let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey])
+        diskTotal = Int64(values?.volumeTotalCapacity ?? 0)
+        diskFree = values?.volumeAvailableCapacityForImportantUsage ?? 0
+        if Look.captured { (diskTotal, diskFree) = (494_000_000_000, 38_400_000_000) }  // screenshots: a made-up disk
+    }
+
     var totalBytes: Int64 { breakdown?.copies.reduce(0) { $0 + $1.size } ?? 0 }
 
     // MARK: Scanning
@@ -143,6 +155,7 @@ final class AppModel {
         recompute()
         focus = breakdown?.groups.isEmpty == false ? .group(0) : nil
         detailed = false
+        refreshDisk()
         phase = .results
     }
 
@@ -351,6 +364,7 @@ final class AppModel {
                 self.foldedBytes = summary.foldedBytes
                 self.journal = summary.journal
                 self.runs = Run.all()
+                self.refreshDisk()
                 self.phase = .done
             }
         }

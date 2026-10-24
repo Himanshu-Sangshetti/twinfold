@@ -13,6 +13,7 @@ APP=dist/Twinfold.app
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/TwinfoldApp" "$APP/Contents/MacOS/Twinfold"
 cp "$BIN/twinfold" dist/twinfold
+cp -R Sources/TwinfoldApp/Fonts "$APP/Contents/Resources/Fonts"
 
 # Icon: render the SwiftUI icon, then build every size iconutil wants.
 ICON=.build/icon && rm -rf $ICON && mkdir -p $ICON/Twinfold.iconset

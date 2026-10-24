@@ -35,7 +35,7 @@ struct FoldAnimation: View {
             FileChip(name: "api/torch.dylib").position(x: rightX, y: fileY)
 
             Text(folded ? "Stored once" : "Stored twice")
-                .font(.system(size: 12, weight: .medium))
+                .font(.display(17, italic: true))
                 .foregroundStyle(folded ? Color.fold : Color.quiet)
                 .contentTransition(.opacity)
                 .position(x: middle, y: h - 4)
@@ -67,7 +67,7 @@ struct FoldAnimation: View {
         var body: some View {
             HStack(spacing: 6) {
                 Image(systemName: "doc.fill").font(.system(size: 12)).foregroundStyle(Color.quiet)
-                Text(name).font(.system(size: 11, design: .monospaced))
+                Text(name).font(.mono(11.5))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

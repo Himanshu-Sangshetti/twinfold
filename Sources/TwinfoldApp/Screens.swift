@@ -38,13 +38,22 @@ extension View {
     }
 }
 
+extension Color {
+    /// Warm paper in light mode, deep green-black in dark mode.
+    static let paper = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.075, green: 0.086, blue: 0.082, alpha: 1)
+            : NSColor(red: 0.965, green: 0.958, blue: 0.945, alpha: 1)
+    })
+}
+
 /// Soft colour behind the glass, so panels have something to refract.
 struct Backdrop: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 let w = geo.size.width, h = geo.size.height
-                Color(nsColor: .windowBackgroundColor)
+                Color.paper
                 glow(Color.fold.opacity(0.30), at: UnitPoint(x: 0.08, y: 0.05), radius: w * 0.55)
                 glow(Kind.python.color.opacity(0.20), at: UnitPoint(x: 0.95, y: 0.95), radius: w * 0.5)
                 glow(Kind.images.color.opacity(0.10), at: UnitPoint(x: 0.85, y: 0.0), radius: w * 0.35)
@@ -130,10 +139,68 @@ struct QuietButton: View {
 
 struct Headline: View {
     let text: String
+    var size: CGFloat = 40
     var body: some View {
         Text(text)
-            .font(.system(size: 30, weight: .semibold, design: .rounded))
+            .font(.display(size))
+            .lineSpacing(-2)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// "11.7 GB" set like a headline: the figure upright, the unit in italic.
+struct BigNumber: View {
+    let bytes: Int64
+    var size: CGFloat = 96
+    var color: Color = .primary
+    var body: some View {
+        let parts = Format.bytes(bytes).split(separator: " ", maxSplits: 1).map(String.init)
+        HStack(alignment: .firstTextBaseline, spacing: size * 0.08) {
+            Text(parts.first ?? "")
+                .font(.display(size))
+                .contentTransition(.numericText())
+            if parts.count > 1 {
+                Text(parts[1]).font(.display(size * 0.5, italic: true)).foregroundStyle(color.opacity(0.7))
+            }
+        }
+        .foregroundStyle(color)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The whole disk: what's used, what Twinfold gives back, and what's free. Answers "what does this do for me".
+struct DiskBar: View {
+    let total: Int64
+    let free: Int64
+    let saving: Int64
+    var body: some View {
+        let used = max(0, total - free - saving)
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let scale = w / CGFloat(max(total, 1))
+                HStack(spacing: 2) {
+                    Rectangle().fill(Color.primary.opacity(0.18)).frame(width: max(2, CGFloat(used) * scale))
+                    Rectangle().fill(Color.fold).frame(width: max(saving > 0 ? 3 : 0, CGFloat(saving) * scale))
+                    Rectangle().fill(Color.primary.opacity(0.06))
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 10)
+            HStack {
+                Text("Free space")
+                Text(Format.bytes(free)).foregroundStyle(Color.primary)
+                if saving > 0 {
+                    Image(systemName: "arrow.right").font(.system(size: 10, weight: .semibold))
+                    Text(Format.bytes(free + saving)).foregroundStyle(Color.fold).fontWeight(.semibold)
+                }
+                Spacer()
+                Text("of \(Format.bytes(total))")
+            }
+            .font(.system(size: 12).monospacedDigit())
+            .foregroundStyle(Color.quiet)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -217,7 +284,10 @@ struct IdleView: View {
         Card(width: 520) {
             FoldAnimation()
                 .padding(.bottom, 4)
-            Headline(text: "Get disk space back\nwithout removing any files.")
+            (Text("Get disk space back\n") + Text("without removing").font(.display(44, italic: true)) + Text(" any files."))
+                .font(.display(44))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Lede(text: "Twinfold finds files that are exactly the same and stores their data once. Every file stays in its folder and keeps working.")
             Text("Scanning only reads files and takes about a minute. Nothing changes until you press Save.")
                 .font(.system(size: 13))
@@ -303,16 +373,19 @@ struct SimpleResults: View {
         let top = model.topFolders
         let total = max(1, top.reduce(0) { $0 + $1.bytes })
         Card(width: 620) {
-            VStack(spacing: 6) {
-                Text(Format.bytes(model.selectedBytes))
-                    .font(.system(size: 60, weight: .semibold, design: .rounded))
-                    .contentTransition(.numericText())
+            VStack(spacing: 2) {
+                BigNumber(bytes: model.selectedBytes)
                 Text("is taken up by exact duplicate copies.")
                     .font(.system(size: 17))
                     .foregroundStyle(Color.quiet)
             }
+            if model.diskTotal > 0 {
+                DiskBar(total: model.diskTotal, free: model.diskFree, saving: model.selectedBytes)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 6)
+            }
             SaveButton()
-            Label("Nothing is removed. All \(model.selected.count.formatted()) files are checked byte for byte before they change, and you can undo it.",
+            Label("Nothing is removed. Every file is checked byte for byte first, and you can undo it.",
                   systemImage: "checkmark.shield")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.fold)
@@ -361,16 +434,14 @@ struct DetailedResults: View {
                 HStack(alignment: .top, spacing: 24) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(Format.bytes(model.selectedBytes))
-                                .font(.system(size: 42, weight: .semibold, design: .rounded))
-                                .contentTransition(.numericText())
+                            BigNumber(bytes: model.selectedBytes, size: 56)
                             if model.selectedBytes < model.totalBytes {
                                 Text("of \(Format.bytes(model.totalBytes)) selected")
                                     .font(.system(size: 15))
                                     .foregroundStyle(Color.quiet)
                             }
                         }
-                        Text("is stored twice on your disk. \(Format.count(model.selected.count, "file is an exact copy", "files are exact copies")) of other files; Twinfold keeps every file and stores the data once.")
+                        Text("is taken up by exact duplicate copies: \(Format.count(model.selected.count, "file", "files")). Twinfold keeps every file and stores the data once.")
                             .font(.system(size: 14))
                             .foregroundStyle(Color.quiet)
                             .fixedSize(horizontal: false, vertical: true)
@@ -464,10 +535,12 @@ struct DoneView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         Card(width: 520) {
-            Text(Format.bytes(model.freedBytes))
-                .font(.system(size: 56, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.fold)
+            BigNumber(bytes: model.freedBytes, size: 88, color: .fold)
             Lede(text: "of disk space back. Every file is still where it was.")
+            if model.diskTotal > 0 {
+                DiskBar(total: model.diskTotal, free: max(0, model.diskFree - model.freedBytes), saving: model.freedBytes)
+                    .padding(.horizontal, 20)
+            }
             Label("All \(Format.count(model.foldedFiles, "file was", "files were")) compared byte for byte with their twin right before sharing space.",
                   systemImage: "checkmark.seal")
                 .font(.system(size: 13))
@@ -519,7 +592,7 @@ struct HistoryView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("History").font(.system(size: 28, weight: .semibold, design: .rounded))
+                    Text("History").font(.display(40))
                     Text(model.runs.isEmpty
                         ? "Nothing saved yet."
                         : "\(Format.bytes(model.totalSaved)) saved on this Mac. Undo any run to give its files their own copies again.")
@@ -583,7 +656,7 @@ struct AutomaticSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles").font(.system(size: 22)).foregroundStyle(Color.fold)
-                Text("Automatic").font(.system(size: 22, weight: .semibold, design: .rounded))
+                Text("Automatic").font(.display(32))
                 if model.entitlement.unlocked {
                     Text("Pro").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.fold)
                 }

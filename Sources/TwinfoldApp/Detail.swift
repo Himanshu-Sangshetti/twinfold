@@ -35,7 +35,7 @@ struct GroupDetail: View {
                 Image(nsImage: Icons.icon(for: group.keeper)).resizable().frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text((group.keeper as NSString).lastPathComponent)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.display(24))
                         .lineLimit(2)
                     Text("\(group.files.count) identical files · \(Format.bytes(group.size)) each")
                         .font(.system(size: 12))
@@ -52,7 +52,7 @@ struct GroupDetail: View {
                 ForEach(group.files, id: \.self) { path in
                     HStack(alignment: .top, spacing: 8) {
                         Text(Format.path(path))
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.mono(11))
                             .foregroundStyle(Color.quiet)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -253,7 +253,7 @@ struct FolderDetail: View {
             HStack(spacing: 10) {
                 Image(nsImage: Icons.folder).resizable().frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text((path as NSString).lastPathComponent).font(.system(size: 15, weight: .semibold))
+                    Text((path as NSString).lastPathComponent).font(.display(24))
                     Text(Format.path(path)).font(.system(size: 11)).foregroundStyle(Color.quiet)
                         .lineLimit(1).truncationMode(.middle)
                 }

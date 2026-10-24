@@ -7,6 +7,7 @@ struct TwinfoldApp: App {
     @State private var model = AppModel()
 
     init() {
+        Typography.register()
         Snapshot.runIfRequested()
         Self.runAutomaticIfRequested()
     }

@@ -11,7 +11,7 @@ let package = Package(
     targets: [
         .target(name: "TwinfoldCore"),
         .executableTarget(name: "twinfold", dependencies: ["TwinfoldCore"]),
-        .executableTarget(name: "TwinfoldApp", dependencies: ["TwinfoldCore"]),
+        .executableTarget(name: "TwinfoldApp", dependencies: ["TwinfoldCore"], resources: [.copy("Fonts")]),
         .testTarget(name: "TwinfoldCoreTests", dependencies: ["TwinfoldCore"]),
     ],
     swiftLanguageModes: [.v5]
