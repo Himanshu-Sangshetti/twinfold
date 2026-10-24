@@ -117,6 +117,16 @@ public struct Journal: Sendable {
         }
     }
 
+    static func rewrite(_ url: URL, with entries: [FoldResult]) {
+        var data = Data()
+        for e in entries {
+            guard let line = try? JSONEncoder().encode(e) else { continue }
+            data.append(line)
+            data.append(0x0A)
+        }
+        try? data.write(to: url, options: .atomic)
+    }
+
     public func entries() -> [FoldResult] {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         return text.split(separator: "\n").compactMap { try? JSONDecoder().decode(FoldResult.self, from: Data($0.utf8)) }

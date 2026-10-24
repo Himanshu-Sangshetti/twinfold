@@ -18,6 +18,7 @@ cleanup() {
   for j in "${NEW_JOURNALS[@]:-}"; do [[ -n "$j" && -f "$j" ]] && rm -f "$j"; done
   if [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *twinfold-e2e.* ]]; then
     chflags -R nouchg "$WORK" 2>/dev/null
+    for m in "$FIX" "$WORK/vol" "$WORK/vol2"; do mount | grep -q " on $m " && hdiutil detach -quiet -force "$m"; done
     rm -rf "$WORK"
   fi
 }
@@ -234,6 +235,9 @@ TF="$REPO/.build/release/twinfold"
 # ---------------------------------------------------------------- 2. fixture
 note "creating fixture in $FIX"
 mkdir -p "$FIX"
+# The fixture gets its own APFS volume, so free-space checks aren't thrown off by other apps writing to the boot disk.
+hdiutil create -quiet -size 2g -fs APFS -volname twinfold-e2e-fixture -type SPARSE "$WORK/fixture.sparseimage"
+hdiutil attach -quiet -nobrowse -mountpoint "$FIX" "$WORK/fixture.sparseimage"
 T gen "$FIX" "$META"
 sync; sleep 2
 EXPECTED="$(python3 -c "import json;print(json.load(open('$META'))['expected_with_exclude'])")"
@@ -354,6 +358,38 @@ if hdiutil create -quiet -size 64m -fs APFS -volname twinfold-e2e -type SPARSE "
     record FAIL "journals go to the test's own support folder" "$(ls "$JOURNAL_DIR")"
 else
   record FAIL "two volumes: create and attach a test APFS image" ""
+fi
+
+# ---------------------------------------------------------------- 8c. undo with little free space
+# Undo un-shares data. On a nearly full disk it must stop before filling it, keep the rest, and finish later.
+note "undo on a nearly full disk"
+VOL2="$WORK/vol2"
+mkdir -p "$VOL2"
+if hdiutil create -quiet -size 100m -fs APFS -volname twinfold-e2e-full -type SPARSE "$WORK/full.sparseimage" &&
+   hdiutil attach -quiet -nobrowse -mountpoint "$VOL2" "$WORK/full.sparseimage"; then
+  head -c 12000000 /dev/urandom > "$VOL2/a.bin"; cp "$VOL2/a.bin" "$VOL2/b.bin"; cp "$VOL2/a.bin" "$VOL2/c.bin"
+  "$TF" reclaim --yes --min-size 1K "$VOL2" > /dev/null 2>&1
+  J2=$(ls -t "$JOURNAL_DIR"/*.jsonl | head -1)
+  # Leave room for one 12 MB copy plus the 2 MB reserve, not two.
+  FREE=$(df -k "$VOL2" | awk 'NR==2 {print $4 * 1024}')
+  dd if=/dev/zero of="$VOL2/filler" bs=1m count=$(( (FREE - 23000000) / 1048576 )) 2>/dev/null
+  TWINFOLD_UNDO_RESERVE=2MB "$TF" undo --yes "$J2" > "$WORK/undo2.out" 2>&1
+  if grep -q "Stopped to keep free space" "$WORK/undo2.out" && [[ "$(wc -l < "$J2" | tr -d ' ')" == 1 ]] && cmp -s "$VOL2/a.bin" "$VOL2/c.bin"; then
+    record PASS "undo on a full disk: stops in time, keeps the rest in the journal" ""
+  else
+    record FAIL "undo on a full disk: stops in time, keeps the rest in the journal" "$(tr '\n' ' ' < "$WORK/undo2.out")"
+  fi
+  rm -f "$VOL2/filler"
+  TWINFOLD_UNDO_RESERVE=2MB "$TF" undo --yes "$J2" > "$WORK/undo3.out" 2>&1
+  if [[ ! -e "$J2" ]] && cmp -s "$VOL2/a.bin" "$VOL2/b.bin" && cmp -s "$VOL2/a.bin" "$VOL2/c.bin" &&
+     [[ "$("$TF" scan --json --min-size 1K "$VOL2" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["reclaimableBytes"])')" == 24000000 ]]; then
+    record PASS "undo on a full disk: finishes after space is freed" ""
+  else
+    record FAIL "undo on a full disk: finishes after space is freed" "$(tr '\n' ' ' < "$WORK/undo3.out")"
+  fi
+  hdiutil detach -quiet "$VOL2" || hdiutil detach -quiet -force "$VOL2"
+else
+  record FAIL "undo on a full disk: create and attach a test APFS image" ""
 fi
 
 # ---------------------------------------------------------------- 9. report

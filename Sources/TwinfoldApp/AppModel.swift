@@ -48,6 +48,8 @@ final class AppModel {
     private(set) var settings = Settings.load()
     private(set) var runs: [Run] = Run.all()
     private(set) var autoRunning = false
+    /// What the last undo did, shown on the History screen.
+    var undoMessage: String?
     private(set) var entitlement = Entitlement.load()
     var showingAutomatic = false
     private(set) var activating = false
@@ -261,10 +263,11 @@ final class AppModel {
         foldTotal = run.files
         foldedCount = 0
         Task.detached(priority: .userInitiated) {
-            run.undo { done, _ in
+            let result = run.undo { done, _ in
                 if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
             }
             await MainActor.run {
+                self.undoMessage = Self.describe(result)
                 self.runs = Run.all()
                 self.phase = .history
             }
@@ -306,15 +309,28 @@ final class AppModel {
         foldTotal = run.files
         foldedCount = 0
         Task.detached(priority: .userInitiated) {
-            run.undo { done, _ in
+            let result = run.undo { done, _ in
                 if done % 25 == 0 { Task { @MainActor [weak self] in self?.foldedCount = done } }
             }
             await MainActor.run {
                 self.journal = nil
+                self.undoMessage = Self.describe(result)
+                self.report = nil
+                self.breakdown = nil
                 self.runs = Run.all()
-                self.reset()
+                self.phase = .history
             }
         }
+    }
+
+    nonisolated static func describe(_ r: Run.UndoResult) -> String {
+        var parts = ["\(Format.count(r.restored, "file has its", "files have their")) own copy again."]
+        if r.gone > 0 { parts.append("\(Format.count(r.gone, "file was", "files were")) deleted or moved since, so there was nothing to restore.") }
+        if r.failed > 0 { parts.append("\(Format.count(r.failed, "file", "files")) couldn't be restored and stayed as they were.") }
+        if r.stoppedForSpace {
+            parts.append("Stopped before your disk got too full: \(Format.count(r.remaining, "file needs", "files need")) \(Format.bytes(r.remainingBytes)) more. Free some space and press Undo on this run again to finish.")
+        }
+        return parts.joined(separator: " ")
     }
 
     /// Keeps the Mac from idling to sleep (and the app from napping) while work is running.

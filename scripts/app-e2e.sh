@@ -53,7 +53,8 @@ check "unticked folder A was left alone (still 160 MB to share)" "$(reclaimable)
 check "unticked folder is remembered for next time" "$(python3 -I -c "import json; print(json.load(open('$TWINFOLD_SUPPORT_DIR/settings.json'))['leaveAlone'])")" "['$FIX/A']"
 touch "$OUT/continue"
 wait $APP
-check "undo finished" "$(field 4-undone phase)" idle
+check "undo finished and shows History" "$(field 4-undone phase)" history
+check "undo says what it restored" "$(field 4-undone message)" "1 file has its own copy again."
 check "every file's contents unchanged after undo" "$(hashes)" "$BEFORE"
 check "after undo all 200 MB is separate again" "$(reclaimable)" 200000000
 

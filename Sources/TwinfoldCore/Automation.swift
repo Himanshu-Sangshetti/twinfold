@@ -56,17 +56,46 @@ public struct Run: Identifiable, Sendable {
         .sorted { $0.date > $1.date }
     }
 
-    /// Gives every file in the run its own copy again, then removes the journal. Returns files undone.
+    /// Free space kept in hand while undoing; `TWINFOLD_UNDO_RESERVE` overrides it (tests).
+    static var reserve: Int64 {
+        ProcessInfo.processInfo.environment["TWINFOLD_UNDO_RESERVE"].flatMap(Format.parseSize) ?? 200_000_000
+    }
+
+    public struct UndoResult: Sendable, Equatable {
+        public var restored = 0
+        /// Files deleted or moved since the run; nothing to restore.
+        public var gone = 0
+        public var failed = 0
+        /// Undo un-shares data, which takes space; it stops before the disk fills and keeps the rest for later.
+        public var stoppedForSpace = false
+        public var remaining = 0
+        public var remainingBytes: Int64 = 0
+    }
+
+    /// Gives every file in the run its own copy again, oldest first, while there's room. Files undone (or gone)
+    /// leave the journal; if space runs out, the journal keeps the rest so the run can be finished later.
     @discardableResult
-    public func undo(progress: ((Int, Int) -> Void)? = nil) -> Int {
+    public func undo(progress: ((Int, Int) -> Void)? = nil) -> UndoResult {
         let entries = Journal(url: journal).entries()
-        var undone = 0
+        var result = UndoResult()
         for (i, entry) in entries.enumerated() {
-            if Unfolder.unfold(entry.path) { undone += 1 }
-            progress?(i + 1, entries.count)
+            defer { progress?(i + 1, entries.count) }
+            guard FileSystem.lstat(entry.path) != nil else {
+                result.gone += 1
+                continue
+            }
+            if FileSystem.freeBytes(entry.path) < entry.size + Self.reserve {
+                let rest = Array(entries[i...])
+                result.stoppedForSpace = true
+                result.remaining = rest.count
+                result.remainingBytes = rest.reduce(0) { $0 + $1.size }
+                Journal.rewrite(journal, with: rest)
+                return result
+            }
+            if Unfolder.unfold(entry.path) { result.restored += 1 } else { result.failed += 1 }
         }
         try? FileManager.default.removeItem(at: journal)
-        return undone
+        return result
     }
 }
 

@@ -205,13 +205,18 @@ case "undo":
     let cost = entries.reduce(Int64(0)) { $0 + $1.size }
     print("\n  Undoing \(entries.count) folds from \(url.lastPathComponent). This uses \(Format.bytes(cost)) again.")
     if !args.yes, isatty(STDIN_FILENO) == 1, !confirm("  Continue?") { exit(0) }
-    var restored = 0
-    for (i, entry) in entries.enumerated() {
-        status("Restoring \(i + 1) of \(entries.count)…")
-        if Unfolder.unfold(entry.path) { restored += 1 }
+    let result = Run(journal: url, date: Date(), files: entries.count, bytes: cost).undo { done, total in
+        status("Restoring \(done) of \(total)…")
     }
     clearStatus()
-    print("  \(restored) files have their own copy again.\n")
+    print("  \(Format.count(result.restored, "file has its", "files have their")) own copy again.")
+    if result.gone > 0 { print("  \(Format.count(result.gone, "file was", "files were")) deleted or moved since, nothing to restore.") }
+    if result.failed > 0 { print("  \(Format.count(result.failed, "file", "files")) couldn't be restored and were left as they are.") }
+    if result.stoppedForSpace {
+        print("  Stopped to keep free space: \(Format.count(result.remaining, "file needs", "files need")) \(Format.bytes(result.remainingBytes)) more.")
+        print("  Free some space, then run `twinfold undo \(url.path)` again to finish.")
+    }
+    print("")
 
 case "version", "--version", "-v":
     print("twinfold \(version)")

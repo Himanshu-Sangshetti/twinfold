@@ -319,7 +319,7 @@ struct LicenseServerTests {
         let runs = Run.all()
         #expect(runs.count == 1)
         #expect(runs.first?.bytes == 200_000)
-        #expect(runs.first?.undo() == 1)
+        #expect(runs.first?.undo().restored == 1)
         #expect(Run.all().isEmpty)
         #expect(read(b) == Data(data))
         #expect(box.scan().reclaimableBytes == 400_000)
@@ -335,5 +335,25 @@ struct LicenseServerTests {
         #expect((plist["StartCalendarInterval"] as? [String: Int])?["Weekday"] == 0)
         try LaunchAgent.install(executable: "/x", frequency: .off)
         #expect(!FileManager.default.fileExists(atPath: LaunchAgent.url.path))
+    }
+}
+
+@Suite struct UndoTests {
+    @Test func undoSkipsFilesDeletedSinceAndFinishesTheRun() throws {
+        let box = Sandbox()
+        let data = random(150_000)
+        box.file("a.bin", data)
+        let b = box.file("b.bin", data)
+        let c = box.file("c.bin", data)
+        let journal = Journal(url: URL(fileURLWithPath: "\(box.root)/run.jsonl"))
+        _ = Reclaimer(journal: journal).reclaim(box.scan().actionable)
+        try FileManager.default.removeItem(atPath: b)
+
+        let result = Run(journal: journal.url, date: Date(), files: 2, bytes: 300_000).undo()
+        #expect(result.restored == 1)
+        #expect(result.gone == 1)
+        #expect(!result.stoppedForSpace)
+        #expect(read(c) == Data(data))
+        #expect(!FileManager.default.fileExists(atPath: journal.url.path))
     }
 }

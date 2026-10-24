@@ -448,6 +448,14 @@ struct HistoryView: View {
                     model.phase = model.breakdown == nil ? .idle : .results
                 }
             }
+            if let message = model.undoMessage {
+                Label(message, systemImage: "arrow.uturn.backward.circle")
+                    .font(.system(size: 13))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glass(16)
+            }
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(model.runs) { run in

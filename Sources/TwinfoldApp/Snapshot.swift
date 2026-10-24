@@ -112,8 +112,8 @@ enum Snapshot {
             try? await Task.sleep(for: .milliseconds(100))
         }
         model.undo()
-        await wait(for: .idle)
-        await step("4-undone", [:])
+        await wait(for: .history)
+        await step("4-undone", ["message": model.undoMessage ?? ""])
         exit(0)
     }
 
