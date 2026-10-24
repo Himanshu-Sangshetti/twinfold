@@ -6,6 +6,7 @@
 
 <p align="center">
   Get disk space back on your Mac without removing any files.
+  <br><a href="https://himanshu-sangshetti.github.io/twinfold/">Website</a> · <a href="https://github.com/Himanshu-Sangshetti/twinfold/releases/latest/download/Twinfold.zip">Download</a>
 </p>
 
 <p align="center">
@@ -38,7 +39,7 @@ History, where you can undo it any time.
 
 ## Install
 
-**App:** download `Twinfold.zip` from [Releases](https://github.com/Himanshu-Sangshetti/twinfold/releases),
+**App:** [download Twinfold.zip](https://github.com/Himanshu-Sangshetti/twinfold/releases/latest/download/Twinfold.zip),
 unzip, and drag Twinfold to Applications. The app isn't notarized by Apple yet, so the first time, macOS
 will say it can't check it: open it once, then choose **Open Anyway** in System Settings, Privacy & Security.
 

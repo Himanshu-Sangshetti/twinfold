@@ -14,10 +14,12 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           tar -czf dist/twinfold-$VERSION-macos.tar.gz -C dist twinfold
           shasum -a 256 dist/Twinfold-$VERSION.zip dist/twinfold-$VERSION-macos.tar.gz > dist/checksums.txt
+          cp dist/Twinfold-$VERSION.zip dist/Twinfold.zip  # stable name for releases/latest/download/Twinfold.zip
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/Twinfold-*.zip
+            dist/Twinfold.zip
             dist/twinfold-*-macos.tar.gz
             dist/checksums.txt
           generate_release_notes: true

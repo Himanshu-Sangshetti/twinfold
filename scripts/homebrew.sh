@@ -19,7 +19,7 @@ cask "twinfold" do
   url "$URL/Twinfold-#{version}.zip"
   name "Twinfold"
   desc "Get disk space back without removing files: identical files share storage (APFS clones)"
-  homepage "https://github.com/Himanshu-Sangshetti/twinfold"
+  homepage "https://himanshu-sangshetti.github.io/twinfold/"
 
   depends_on macos: ">= :sonoma"
 
@@ -29,6 +29,11 @@ cask "twinfold" do
     "~/Library/Application Support/Twinfold",
     "~/Library/LaunchAgents/app.twinfold.automatic.plist",
   ]
+
+  caveats <<~EOS
+    Twinfold is not notarized yet. If macOS blocks the first launch, open
+    System Settings > Privacy & Security and click Open Anyway.
+  EOS
 end
 RUBY
 
