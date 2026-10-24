@@ -49,5 +49,5 @@ fi
 
 codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "$APP"
 rm -rf dist/zip && mkdir -p dist/zip && ditto dist/Twinfold.app dist/zip/Twinfold.app && cp packaging/READ-ME-FIRST.txt dist/zip/
-(cd dist/zip && rm -f ../Twinfold-$VERSION.zip && ditto -c -k --sequesterRsrc . ../Twinfold-$VERSION.zip)  # the app plus how to open it the first time
+(cd dist/zip && rm -f ../Twinfold-$VERSION.zip && ditto -c -k . ../Twinfold-$VERSION.zip)  # the app plus how to open it the first time
 echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/Twinfold"))"
