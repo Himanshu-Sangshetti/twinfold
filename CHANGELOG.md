@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Undo is safer: it skips files deleted since, stops before the disk gets too full, keeps the rest, and finishes when you undo that run again. History shows what each undo did.
+- Start screen animation: two identical files folding into one block on disk.
+- Automatic: choose the watched folders, see and remove folders that are always left alone, and get a notification when an overnight run saved space.
+- Folder detail uses the same duplicate count as the list and names the exact folders (for example each project's node_modules) where the identical files are; it's cached, so big scans stay smooth.
+- Done screen says how many files were compared byte for byte and how much free space undo would need.
+- Tests: identical files on two different volumes are never paired; undo on a nearly full disk; the CLI test no longer writes to the real History folder.
+
 ## 0.3.0
 
 - Saving is free and unlimited. Twinfold Pro ($12 once) adds Automatic: a daily or weekly run at 3 am via launchd, plus a menu bar item.
