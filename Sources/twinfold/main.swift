@@ -1,7 +1,7 @@
 import Foundation
 import TwinfoldCore
 
-let version = "0.1.0"
+let version = "0.2.0"
 
 let help = """
     twinfold \(version): free disk space on your Mac without deleting anything.

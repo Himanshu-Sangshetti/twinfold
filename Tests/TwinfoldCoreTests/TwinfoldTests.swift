@@ -254,3 +254,56 @@ func read(_ path: String) -> Data { FileManager.default.contents(atPath: path)! 
         #expect(FileSystem.extentKey(c, size: 100_000) != FileSystem.extentKey(keeper, size: 100_000))
     }
 }
+
+@Suite struct LicensingTests {
+    @Test func freeSavingStopsAtTheLimitAndAKeyRemovesIt() {
+        var e = Entitlement()
+        #expect(e.remaining == Store.freeLimit)
+        e.record(saved: Store.freeLimit - 1_000)
+        #expect(e.remaining == 1_000)
+        e.record(saved: 5_000)
+        #expect(e.remaining == 0)
+        e.license = License(key: "k", instanceID: "i", email: "a@b.c", activatedAt: Date())
+        #expect(e.remaining == .max)
+    }
+
+    @Test func pickKeepsBiggestCopiesThatFit() {
+        let copies = [300, 200, 150, 50].enumerated().map {
+            Copy(id: $0.offset, group: $0.offset, path: "/x/\($0.offset)", size: Int64($0.element), kind: .other)
+        }
+        #expect(Entitlement.pick(copies, within: 400).map(\.size) == [300, 50])
+        #expect(Entitlement.pick(copies, within: 0).isEmpty)
+    }
+
+    @Test func activationAcceptsOnlyThisProduct() throws {
+        func body(_ product: String) -> Data {
+            Data("""
+            {"id":"lki_1","business_id":"b","name":"Mac","license_key_id":"lk","created_at":"2026-10-24T00:00:00Z",
+             "product":{"product_id":"\(product)","name":"Twinfold Unlimited"},
+             "customer":{"customer_id":"c","name":"A","email":"a@example.com"}}
+            """.utf8)
+        }
+        let license = try Activation.parse(body(Store.productID), status: 201, key: " KEY-1 \n")
+        #expect(license.key == "KEY-1")
+        #expect(license.email == "a@example.com")
+        #expect(throws: ActivationError.wrongProduct) { try Activation.parse(body("pdt_other"), status: 201, key: "k") }
+        #expect(throws: ActivationError.notFound) { try Activation.parse(Data(), status: 404, key: "k") }
+        #expect(throws: ActivationError.limitReached) { try Activation.parse(Data(), status: 422, key: "k") }
+    }
+}
+
+/// Talks to the real Dodo Payments license server; run with TWINFOLD_NETWORK_TESTS=1.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["TWINFOLD_NETWORK_TESTS"] == "1"))
+struct LicenseServerTests {
+    @Test func unknownKeyIsRejectedByTheServer() async {
+        await #expect(throws: ActivationError.notFound) { try await Activation.activate(key: "twinfold-not-a-real-key") }
+    }
+
+    /// Needs a key from a test-mode purchase in TWINFOLD_TEST_LICENSE.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["TWINFOLD_TEST_LICENSE"] != nil))
+    func realKeyActivates() async throws {
+        let key = try #require(ProcessInfo.processInfo.environment["TWINFOLD_TEST_LICENSE"])
+        let license = try await Activation.activate(key: key, machine: "twinfold test")
+        #expect(!license.instanceID.isEmpty)
+    }
+}

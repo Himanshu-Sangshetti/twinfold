@@ -172,7 +172,10 @@ struct ProofSection: View {
     @Environment(AppModel.self) private var model
     let group: DuplicateGroup
     /// Small sets are checked as soon as they're shown; big ones wait for a click.
-    private var automatic: Bool { group.size * Int64(group.files.count) <= 400_000_000 }
+    private var automatic: Bool {
+        group.size * Int64(group.files.count) <= 400_000_000
+            && ProcessInfo.processInfo.environment["TWINFOLD_CAPTURE"] == nil  // screenshots use made-up paths
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

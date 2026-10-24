@@ -222,7 +222,9 @@ struct ResultsView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 10) {
                     PrimaryButton(title: "Save \(Format.bytes(model.selectedBytes))",
-                                  disabled: model.selectedBytes == 0) { confirming = true }
+                                  disabled: model.selectedBytes == 0) {
+                        if model.needsUnlock { model.showingUnlock = true } else { confirming = true }
+                    }
                         .confirmationDialog(
                             "Store \(Format.count(model.selected.count, "duplicate", "duplicates")) only once?",
                             isPresented: $confirming
@@ -232,6 +234,7 @@ struct ResultsView: View {
                         } message: {
                             Text("Every file stays in its folder with its own name, dates and permissions. Each one is compared byte for byte again right before it changes. You can undo this afterwards.")
                         }
+                    PlanLine()
                     HStack(spacing: 6) {
                         if let date = model.scannedAt {
                             Text("Scanned \(date.formatted(.relative(presentation: .named)))")
@@ -244,6 +247,7 @@ struct ResultsView: View {
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)
+            .sheet(isPresented: $model.showingUnlock) { UnlockSheet() }
 
             // Breakdown by kind
             KindBar(kinds: kinds, highlight: model.kindFilter)
@@ -571,5 +575,103 @@ struct HowItWorks: View {
         }
         .font(.system(size: 13))
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Under the Save button: how much free saving is left, or that this Mac is unlocked.
+struct PlanLine: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        Group {
+            if model.entitlement.unlocked {
+                Label("Unlimited", systemImage: "checkmark.seal.fill").foregroundStyle(Color.fold)
+            } else {
+                HStack(spacing: 6) {
+                    Text("Free: \(Format.bytes(model.entitlement.remaining)) of \(Format.bytes(Store.freeLimit)) left")
+                        .foregroundStyle(Color.quiet)
+                    Button("Unlock") { model.showingUnlock = true }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.fold)
+                }
+            }
+        }
+        .font(.system(size: 12, weight: .medium))
+    }
+}
+
+struct UnlockSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var key = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if model.entitlement.unlocked {
+                Label("Unlocked", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.fold)
+                Text("Thanks! Twinfold now saves without a limit on this Mac\(model.entitlement.license.map { " (\($0.email))" } ?? "").")
+                    .font(.system(size: 13))
+                HStack {
+                    Spacer()
+                    Button("Close") { dismiss() }.controlSize(.large)
+                    PrimaryButton(title: "Save \(Format.bytes(model.selectedBytes))") {
+                        dismiss()
+                        model.fold()
+                    }
+                }
+            } else {
+                Text("Unlock unlimited saving").font(.system(size: 20, weight: .semibold))
+                Text("The free version saves up to \(Format.bytes(Store.freeLimit)). You have \(Format.bytes(model.entitlement.remaining)) left, and \(Format.bytes(model.selectedBytes)) is selected.")
+                    .font(.system(size: 13))
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Twinfold Unlimited · \(Store.price) once").font(.system(size: 14, weight: .semibold))
+                    Text("Unlimited saving on up to 3 Macs. No subscription. Scanning, the command line tool and the source code stay free.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.quiet)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                HStack(spacing: 12) {
+                    PrimaryButton(title: "Buy for \(Store.price)") { model.buy() }
+                    if model.freeBatchBytes > 0 {
+                        Button("Save \(Format.bytes(model.freeBatchBytes)) free now") {
+                            let batch = model.freeBatch
+                            dismiss()
+                            model.fold(batch)
+                        }
+                        .controlSize(.large)
+                    }
+                }
+                Divider()
+                Text("Already bought it? Paste the license key from your email.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.quiet)
+                HStack {
+                    TextField("License key", text: $key)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onSubmit { model.activate(key) }
+                    Button("Activate") { model.activate(key) }
+                        .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || model.activating)
+                    if model.activating { ProgressView().controlSize(.small) }
+                }
+                if let error = model.activationError {
+                    Text(error).font(.system(size: 12)).foregroundStyle(.orange)
+                }
+                HStack {
+                    if Store.mode == .test {
+                        Text("Test store: use card 4242 4242 4242 4242").font(.system(size: 11)).foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Button("Not now") { dismiss() }
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
     }
 }

@@ -5,7 +5,7 @@
 <h1 align="center">Twinfold</h1>
 
 <p align="center">
-  Free up disk space on your Mac without deleting anything.
+  Get disk space back on your Mac without removing any files.
 </p>
 
 <p align="center">
@@ -24,7 +24,9 @@ that one changes; macOS handles it automatically.
 
 On the Mac it was built on, Twinfold found **36 GB** to free, without deleting a single file. It scans a
 home folder of 8.7 million files in about a minute, and you see exactly what will change before anything does:
-by kind, by folder, and file by file, with anything you'd rather leave alone a click away.
+by kind, by folder, and file by file, with anything you'd rather leave alone a click away. Click any file
+to see every identical copy, the disk space now and after, and a live check that reads the files and
+shows they are byte-for-byte identical and how many times the data is really stored.
 
 <p align="center">
   <picture>
@@ -36,7 +38,8 @@ by kind, by folder, and file by file, with anything you'd rather leave alone a c
 ## Install
 
 **App:** download `Twinfold.zip` from [Releases](https://github.com/Himanshu-Sangshetti/twinfold/releases),
-unzip, and drag Twinfold to Applications.
+unzip, and drag Twinfold to Applications. The app isn't notarized by Apple yet, so the first time, macOS
+will say it can't check it: open it once, then choose **Open Anyway** in System Settings, Privacy & Security.
 
 **Command line:**
 
@@ -46,6 +49,13 @@ swift build -c release && cp .build/release/twinfold /usr/local/bin/
 ```
 
 Requires macOS 14 or later. Works on any APFS volume, the default on every Mac since 2017.
+
+## Pricing
+
+Scanning, the command line tool and the source code are free and unlimited, forever. The app saves up to
+5 GB for free; **Twinfold Unlimited** removes the limit for **$12 once** (no subscription, up to 3 Macs).
+Buying it is how you support the project. You can also build the app from source and use it as you like:
+it's MIT licensed.
 
 ## Use
 
@@ -107,7 +117,7 @@ space. Run Twinfold again any time.
 
 **Similar tools:** [Hyperspace](https://hypercritical.co/hyperspace/) is a polished paid app that does
 the same thing. [fclones](https://github.com/pkolaczk/fclones) can do it from the command line. Twinfold
-aims to be a free, open-source app anyone can read and trust.
+is open source, so anyone can read exactly what it does, and every change can be undone.
 
 ## Contributing
 

@@ -13,6 +13,7 @@ TMP=$(realpath "$(mktemp -d)")
 trap 'rm -rf "$TMP"' EXIT
 FIX=$TMP/fixture OUT=$TMP/out
 export TWINFOLD_SUPPORT_DIR=$TMP/support
+export TWINFOLD_FREE_LIMIT=50MB  # free tier: 50 MB, so the 200 MB found needs the paid unlock
 mkdir -p "$FIX" "$OUT"
 
 # 0keep holds the originals (sorts first, so it is kept); A holds 2 copies of an 80 MB file, B one copy of 40 MB.
@@ -41,6 +42,8 @@ APP=$!
 
 waitfor 3-freed.json
 check "app scan finds 200 MB" "$(field 1-scanned reclaimable)" 200000000
+check "200 MB is over the 50 MB free limit, so Save asks to unlock" "$(field 1-scanned needsUnlock)" 1
+check "free tier offers the biggest copies that fit (40 MB)" "$(field 1-scanned freeBatch)" 40000000
 check "unticking folder A leaves 40 MB selected" "$(field 2-unticked selected)" 40000000
 check "app reports no problems" "$(field 3-freed problems)" 0
 atleast "app measured at least 36 MB freed" "$(field 3-freed freed)" 36000000
@@ -48,6 +51,7 @@ check "every file's contents unchanged after freeing" "$(hashes)" "$BEFORE"
 check "done screen proof: example set now stored once" "$(field 3-freed proofStored)" 1
 check "done screen proof: every copy identical" "$(field 3-freed proofIdentical)" 1
 check "done screen proof: no copy missing" "$(field 3-freed proofMissing)" 0
+check "free allowance left after saving 40 MB" "$(field 3-freed freeLeft)" 10000000
 check "unticked folder A was left alone (still 160 MB to share)" "$(reclaimable)" 160000000
 
 touch "$OUT/continue"

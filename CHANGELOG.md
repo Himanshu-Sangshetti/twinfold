@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
+- Paid tier: the app saves up to 5 GB for free; Twinfold Unlimited ($12 once, up to 3 Macs) removes the limit. License keys via Dodo Payments; scanning, the CLI and the source stay free and unlimited.
 - Detail pane: click any folder or file to see every identical copy with its full path, where the copies live, and a now-vs-after picture of disk space.
 - Live proof: re-reads the files on demand and shows they are all in place, identical (SHA-256) and how many times the data is stored on disk. The done screen proves one folded set this way.
 - Wording no longer sounds like deleting: "Save", "stores that data only once", "without removing any files".

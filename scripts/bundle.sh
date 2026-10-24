@@ -42,6 +42,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
+if ! grep -q 'mode: Mode = .live' Sources/TwinfoldCore/Licensing.swift; then
+  echo "warning: the app is using the TEST store (Dodo test mode); set the live product in Licensing.swift before release" >&2
+fi
+
 codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "$APP"
 (cd dist && rm -f Twinfold.zip && ditto -c -k --keepParent Twinfold.app Twinfold-$VERSION.zip)
 echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/Twinfold"))"

@@ -44,6 +44,12 @@ final class AppModel {
     var freedBytes: Int64 = 0
     var problems = 0
     var journal: URL?
+    // Paid tier.
+    private(set) var entitlement = Entitlement.load()
+    var showingUnlock = false
+    private(set) var activating = false
+    private(set) var activationError: String?
+
     /// The biggest set that was folded, shown on the done screen as evidence.
     var example: DuplicateGroup?
 
@@ -186,9 +192,31 @@ final class AppModel {
 
     // MARK: Folding
 
-    func fold() {
+    /// What the free allowance covers out of the current selection.
+    var freeBatch: [Copy] { Entitlement.pick(selected, within: entitlement.remaining) }
+    var freeBatchBytes: Int64 { freeBatch.reduce(0) { $0 + $1.size } }
+    var needsUnlock: Bool { selectedBytes > entitlement.remaining }
+
+    func activate(_ key: String) {
+        activating = true
+        activationError = nil
+        Task {
+            do {
+                let license = try await Activation.activate(key: key)
+                entitlement.license = license
+                entitlement.save()
+            } catch {
+                activationError = error.localizedDescription
+            }
+            activating = false
+        }
+    }
+
+    func buy() { NSWorkspace.shared.open(Store.checkoutURL) }
+
+    func fold(_ copies: [Copy]? = nil) {
         guard let breakdown else { return }
-        let groups = breakdown.groupsToFold(selected)
+        let groups = breakdown.groupsToFold(copies ?? selected)
         // The biggest set that's quick to re-read, so the done screen can prove it on its own.
         let quick = groups.filter { $0.size * Int64($0.files.count) <= 400_000_000 }
         example = (quick.isEmpty ? groups : quick).max { $0.reclaimableBytes < $1.reclaimableBytes }
@@ -208,6 +236,8 @@ final class AppModel {
                 self.freedBytes = max(summary.freeAfter - summary.freeBefore, 0)
                 self.problems = summary.results.count - summary.folded.count
                 self.journal = summary.journal
+                self.entitlement.record(saved: summary.foldedBytes)
+                self.entitlement.save()
                 self.phase = .done
             }
         }
