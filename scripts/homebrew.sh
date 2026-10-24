@@ -21,7 +21,7 @@ cask "twinfold" do
   desc "Get disk space back without removing files: identical files share storage (APFS clones)"
   homepage "https://himanshu-sangshetti.github.io/twinfold/"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Twinfold.app"
 

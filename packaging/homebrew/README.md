@@ -10,5 +10,5 @@ Once the main repo is public:
 
    ```sh
    brew install --cask himanshu-sangshetti/twinfold/twinfold   # the app
-   brew install himanshu-sangshetti/twinfold/twinfold          # the command line tool
+   brew install --formula himanshu-sangshetti/twinfold/twinfold       # the command line tool
    ```
