@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+
+Safety release. Tested on a real Mac: 44,857 files saved (29 GB), every one of 201,219 files re-read byte for byte with identical metadata, undone, verified again, and saved again.
+
+- The replacement file is checked in full (contents, permissions, owner, flags, ACL, every extended attribute, created, modified and Date Added) right before it takes the original's place.
+- Keeps the quarantine attribute and Finder's Date Added exactly (Downloads keeps its order).
+- Leaves alone files open for writing in another app, files changed in the last 5 minutes, files with a "deny" ACL and files with a document id.
+- Undo puts files that already shared storage before (Finder duplicates, earlier clones) back to sharing, so it never uses more space than Save freed. A file it can't restore right now stays in History.
+- A crash or power cut mid-save leaves every file intact; the next run removes the temporary clone.
+- New 42-check safety suite (scripts/safety-e2e.py) in CI.
+- The download includes READ-ME-FIRST.txt on opening an app that isn't notarized.
+
 ## 0.6.0
 
 - New type: Instrument Serif for the big numbers and headlines, Geist Mono for file paths (both bundled, SIL Open Font License).

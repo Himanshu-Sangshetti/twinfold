@@ -110,17 +110,25 @@ For Claude Desktop or Cursor, add this to their MCP settings:
 Twinfold never deletes a file. For each copy it:
 
 1. clones the twin next to it,
-2. compares the clone with the copy **byte for byte** (hashes only pick candidates),
-3. copies the copy's own permissions, dates, tags and extended attributes onto the clone,
-4. checks the copy hasn't changed in the meantime,
+2. copies the copy's own permissions, owner, flags, ACL, extended attributes (tags, quarantine, comments)
+   and dates (created, modified, Date Added) onto the clone,
+3. checks all of that metadata matches exactly, and compares the clone with the copy **byte for byte**
+   (hashes only pick candidates),
+4. checks the copy hasn't changed and no app has it open for writing,
 5. swaps the clone into place in one atomic rename.
 
 If anything looks off at any step, that file is left exactly as it was. Every fold is written to a
-journal, and `twinfold undo` gives each file back its own private copy.
+journal, and Undo (in History, or `twinfold undo`) puts every file back the way it was.
+
+How it was tested: a 42-check safety suite (`scripts/safety-e2e.py`, in CI) kills Twinfold mid-save, edits
+and deletes files between scan and save and after saving, holds files open in other apps, and checks every
+byte and metadata field before and after. And on a real Mac: 44,857 files saved (29 GB), all 201,219 files
+in those sets re-read and compared before and after, undone, compared again, and saved again.
 
 It stays away from things it shouldn't touch: iCloud Drive, Dropbox and other cloud folders (their files
 may not be fully downloaded), Photos and Music libraries, `~/Library` (unless you ask), hard links,
-locked files, files owned by other users and system files.
+locked files, files with a "deny" ACL, files changed in the last few minutes, files open for writing,
+files owned by other users and system files.
 
 ## FAQ
 

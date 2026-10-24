@@ -1,0 +1,28 @@
+Twinfold - how to open it the first time
+=========================================
+
+Twinfold isn't notarized by Apple yet (that costs $99/year and I'm one person),
+so the first time you open it, macOS shows a warning like
+"Apple could not verify Twinfold is free of malware". That's expected.
+
+1. Drag Twinfold.app into your Applications folder.
+2. Double-click Twinfold. When the warning appears, click Done (not Move to Bin).
+3. Open System Settings > Privacy & Security, scroll down, and click
+   "Open Anyway" next to the Twinfold message. Confirm with your password.
+4. From now on it opens normally.
+
+Prefer the Terminal? This does the same thing:
+
+    xattr -dr com.apple.quarantine /Applications/Twinfold.app
+
+The code is all open: https://github.com/Himanshu-Sangshetti/twinfold
+You can build it yourself with `swift build` if you'd rather.
+
+What Twinfold does to your files
+--------------------------------
+Nothing is deleted, moved or renamed. Identical files are compared byte for
+byte, then made to share one copy of their data on disk (an APFS clone).
+Each file still opens, edits and deletes on its own, exactly as before.
+Every save shows up in History, where one click undoes it.
+
+Questions or problems: https://github.com/Himanshu-Sangshetti/twinfold/issues

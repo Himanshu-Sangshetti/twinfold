@@ -48,5 +48,6 @@ if ! grep -q 'mode: Mode = .live' Sources/TwinfoldCore/Licensing.swift; then
 fi
 
 codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "$APP"
-(cd dist && rm -f Twinfold.zip && ditto -c -k --keepParent Twinfold.app Twinfold-$VERSION.zip)
+rm -rf dist/zip && mkdir -p dist/zip && ditto dist/Twinfold.app dist/zip/Twinfold.app && cp packaging/READ-ME-FIRST.txt dist/zip/
+(cd dist/zip && rm -f ../Twinfold-$VERSION.zip && ditto -c -k --sequesterRsrc . ../Twinfold-$VERSION.zip)  # the app plus how to open it the first time
 echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/Twinfold"))"
