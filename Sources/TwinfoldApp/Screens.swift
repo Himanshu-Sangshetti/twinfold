@@ -16,9 +16,19 @@ extension View {
     /// Liquid Glass on macOS 26, frosted material before it.
     @ViewBuilder func glass(_ radius: CGFloat = 20) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        #if compiler(>=6.2)
         if #available(macOS 26, *), Look.liquidGlass {
             glassEffect(.regular, in: shape)
-        } else if Look.captured {
+        } else {
+            frosted(shape)
+        }
+        #else
+        frosted(shape)
+        #endif
+    }
+
+    @ViewBuilder private func frosted(_ shape: RoundedRectangle) -> some View {
+        if Look.captured {
             background(Color(nsColor: .windowBackgroundColor).opacity(0.72), in: shape)
                 .overlay(shape.strokeBorder(Color.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
@@ -54,6 +64,7 @@ struct PrimaryButton: View {
     var disabled = false
     let action: () -> Void
     var body: some View {
+        #if compiler(>=6.2)
         if #available(macOS 26, *), Look.liquidGlass {
             Button(action: action) {
                 Text(title).font(.system(size: 14, weight: .semibold)).padding(.horizontal, 10)
@@ -65,18 +76,25 @@ struct PrimaryButton: View {
             .disabled(disabled)
             .keyboardShortcut(.defaultAction)
         } else {
-            Button(action: action) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .padding(.horizontal, 26)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(.white)
-                    .background(Color.fold.opacity(disabled ? 0.4 : 1), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(disabled)
-            .keyboardShortcut(.defaultAction)
+            capsule
         }
+        #else
+        capsule
+        #endif
+    }
+
+    private var capsule: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 26)
+                .padding(.vertical, 10)
+                .foregroundStyle(.white)
+                .background(Color.fold.opacity(disabled ? 0.4 : 1), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .keyboardShortcut(.defaultAction)
     }
 }
 
@@ -87,11 +105,15 @@ struct GlassButton: View {
     var body: some View {
         let label = Label { Text(title) } icon: { if let icon { Image(systemName: icon) } }
             .font(.system(size: 13, weight: .medium))
+        #if compiler(>=6.2)
         if #available(macOS 26, *), Look.liquidGlass {
             Button(action: action) { label }.buttonStyle(.glass).controlSize(.large)
         } else {
             Button(action: action) { label }.buttonStyle(.bordered).controlSize(.large)
         }
+        #else
+        Button(action: action) { label }.buttonStyle(.bordered).controlSize(.large)
+        #endif
     }
 }
 
