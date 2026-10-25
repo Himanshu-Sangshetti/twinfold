@@ -96,7 +96,10 @@ s.serve_forever()
 EOF
 STORE=$!; disown $STORE
 trap 'kill $STORE 2>/dev/null; rm -rf "$TMP"' EXIT
-for _ in $(seq 1 50); do [ -s "$TMP/port" ] && break; sleep 0.1; done
+for _ in $(seq 1 300); do [ -s "$TMP/port" ] && break; sleep 0.1; done
+[ -s "$TMP/port" ] || { echo "stand-in license server didn't start"; exit 1; }
+curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"license_key":"x","name":"y"}' \
+  "http://127.0.0.1:$(cat "$TMP/port")/licenses/activate" | grep -q 404 || { echo "stand-in license server isn't answering"; exit 1; }
 rm -f "$TWINFOLD_SUPPORT_DIR/entitlement.json"
 
 python3 -I -c "import json,sys; json.dump({'watched':[sys.argv[1]],'leaveAlone':[],'automatic':'off','lastAutoSaved':0}, open(sys.argv[2],'w'))" "$FIX" "$TWINFOLD_SUPPORT_DIR/settings.json"
@@ -132,7 +135,9 @@ python3 -I -u -m http.server 0 --bind 127.0.0.1 --directory "$FEED" > "$TMP/feed
 FEEDPID=$!; disown $FEEDPID
 trap 'kill $STORE $FEEDPID 2>/dev/null; rm -rf "$TMP"' EXIT
 FEEDPORT=
-for _ in $(seq 1 50); do FEEDPORT=$(grep -oE 'port [0-9]+' "$TMP/feed.log" | grep -oE '[0-9]+' || true); [ -n "$FEEDPORT" ] && break; sleep 0.1; done
+for _ in $(seq 1 300); do FEEDPORT=$(grep -oE 'port [0-9]+' "$TMP/feed.log" | grep -oE '[0-9]+' || true); [ -n "$FEEDPORT" ] && break; sleep 0.1; done
+[ -n "$FEEDPORT" ] || { echo "stand-in update server didn't start"; exit 1; }
+curl -sf "http://127.0.0.1:$FEEDPORT/newer.json" >/dev/null || { echo "stand-in update server isn't answering"; exit 1; }
 live() { python3 -I -c "import json; print(json.load(open('$LIVE/live.json'))['$1'])"; }
 until_file() { for _ in $(seq 1 300); do [ -f "$1" ] && return 0; sleep 0.2; done; echo "timed out waiting for $1"; exit 1; }
 
