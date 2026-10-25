@@ -483,3 +483,16 @@ struct PerformanceTests {
         #expect(Updates.checksum(for: "Twinfold-0.7.2.zip", in: listing) == nil)
     }
 }
+
+@Suite struct ScheduleTimeTests {
+    @Test func runsAtTheChosenHourAndDefaultsToThree() throws {
+        #expect(Settings().runHour == 3)
+        var s = Settings()
+        s.hour = 22
+        #expect(s.runHour == 22)
+        s.hour = 99
+        #expect(s.runHour == 23)
+        let plist = LaunchAgent.plist(executable: "/x", frequency: .daily, hour: 22)
+        #expect((plist["StartCalendarInterval"] as? [String: Int])?["Hour"] == 22)
+    }
+}

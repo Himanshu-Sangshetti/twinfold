@@ -12,6 +12,9 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Start in the menu bar at login while Automatic is on. Optional so settings from 0.7.0 and earlier still
     /// load; nil means on.
     public var openAtLogin: Bool?
+    /// Hour of the automatic run, 0–23. Optional so older settings still load; nil means 3 am.
+    public var hour: Int?
+    public var runHour: Int { min(max(hour ?? 3, 0), 23) }
 
     /// Twinfold stays in the menu bar when its window closes, and starts there at login.
     public var livesInMenuBar: Bool { automatic != .off && openAtLogin != false }
@@ -171,9 +174,10 @@ public enum LaunchAgent {
     public static var url: URL { directory.appendingPathComponent("\(label).plist") }
     static var managed: Bool { ProcessInfo.processInfo.environment["TWINFOLD_LAUNCH_AGENTS"] == nil }
 
-    /// The plist: 3 am every day, or 3 am on Sundays.
-    public static func plist(executable: String, frequency: Settings.Frequency) -> [String: Any] {
-        var interval: [String: Int] = ["Hour": 3, "Minute": 0]
+    /// The plist: every day, or on Sundays, at `hour`. launchd runs a job missed while the Mac was asleep as soon
+    /// as it wakes; one missed while it was shut down waits for the next time.
+    public static func plist(executable: String, frequency: Settings.Frequency, hour: Int = 3) -> [String: Any] {
+        var interval: [String: Int] = ["Hour": hour, "Minute": 0]
         if frequency == .weekly { interval["Weekday"] = 0 }
         return [
             "Label": label,
@@ -185,12 +189,12 @@ public enum LaunchAgent {
         ]
     }
 
-    public static func install(executable: String, frequency: Settings.Frequency) throws {
+    public static func install(executable: String, frequency: Settings.Frequency, hour: Int = 3) throws {
         remove()
         guard frequency != .off else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try PropertyListSerialization.data(
-            fromPropertyList: plist(executable: executable, frequency: frequency), format: .xml, options: 0)
+            fromPropertyList: plist(executable: executable, frequency: frequency, hour: hour), format: .xml, options: 0)
         try data.write(to: url, options: .atomic)
         if managed { launchctl("bootstrap", "gui/\(getuid())", url.path) }
     }

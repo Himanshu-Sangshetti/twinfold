@@ -88,7 +88,7 @@ final class AppModel {
         // After an update (or a move), point the schedule and the login item at this copy of the app.
         if let exe = Bundle.main.executablePath, Install.canSchedule, settings.automatic != .off,
            LaunchAgent.installedExecutable != exe {
-            try? LaunchAgent.install(executable: exe, frequency: settings.automatic)
+            try? LaunchAgent.install(executable: exe, frequency: settings.automatic, hour: settings.runHour)
         }
         applyOpenAtLogin()
         watchSupportFolder()
@@ -341,9 +341,17 @@ final class AppModel {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
         }
         if let exe = Bundle.main.executablePath, Install.canSchedule {
-            try? LaunchAgent.install(executable: exe, frequency: frequency)
+            try? LaunchAgent.install(executable: exe, frequency: frequency, hour: settings.runHour)
         }
         applyOpenAtLogin()
+    }
+
+    func setHour(_ hour: Int) {
+        settings.hour = hour
+        settings.save()
+        if let exe = Bundle.main.executablePath, Install.canSchedule, settings.automatic != .off {
+            try? LaunchAgent.install(executable: exe, frequency: settings.automatic, hour: settings.runHour)
+        }
     }
 
     func setOpenAtLogin(_ on: Bool) {

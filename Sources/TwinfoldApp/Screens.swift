@@ -667,6 +667,10 @@ struct HistoryView: View {
 // MARK: - Pro
 
 struct AutomaticSheet: View {
+    static func hourName(_ h: Int) -> String {
+        let date = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: .now) ?? .now
+        return date.formatted(date: .omitted, time: .shortened)
+    }
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var key = ProcessInfo.processInfo.environment["TWINFOLD_SHEET_KEY"] ?? ""
@@ -680,7 +684,7 @@ struct AutomaticSheet: View {
                     Text("Pro").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.fold)
                 }
             }
-            Text("New projects keep bringing new copies: every `npm install`, every virtualenv, every download. Automatic checks your folders at 3 am, while you sleep, and stores new duplicates once. Folders you've unticked are always left alone, and every run shows up in History, where you can undo it.")
+            Text("New projects keep bringing new copies: every `npm install`, every virtualenv, every download. Automatic checks your folders at the time you pick (3 am unless you change it) and stores new duplicates once. Folders you've unticked are always left alone, and every run shows up in History, where you can undo it.")
                 .font(.system(size: 13))
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -702,6 +706,19 @@ struct AutomaticSheet: View {
                     Text("Every week").tag(Settings.Frequency.weekly)
                 }
                 .pickerStyle(.segmented)
+                HStack(spacing: 8) {
+                    Text("At").font(.system(size: 12))
+                    Picker("At", selection: Binding(get: { model.settings.runHour }, set: { model.setHour($0) })) {
+                        ForEach(0..<24, id: \.self) { h in
+                            Text(Self.hourName(h)).tag(h)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 100)
+                    .disabled(model.settings.automatic == .off)
+                    Text("or as soon as your Mac wakes up after that.")
+                        .font(.system(size: 12)).foregroundStyle(Color.quiet)
+                }
                 Toggle("Keep Twinfold in the menu bar, and start it there when you log in",
                        isOn: Binding(get: { model.settings.openAtLogin != false }, set: { model.setOpenAtLogin($0) }))
                     .font(.system(size: 12))
