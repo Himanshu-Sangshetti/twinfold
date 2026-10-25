@@ -9,6 +9,11 @@ swift build -c release $ARCHS --product TwinfoldApp
 swift build -c release $ARCHS --product twinfold
 BIN=$(swift build -c release $ARCHS --show-bin-path)
 
+# Build output lives in dist.noindex (Spotlight skips it, so build copies never show up as apps in
+# Launchpad or Spotlight); dist is a link to it, so every path stays dist/...
+if [ -d dist ] && [ ! -L dist ]; then rm -rf dist.noindex && mv dist dist.noindex; fi
+mkdir -p dist.noindex && ln -sfn dist.noindex dist
+
 APP=dist/Twinfold.app
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/TwinfoldApp" "$APP/Contents/MacOS/Twinfold"
@@ -50,4 +55,5 @@ fi
 codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "$APP"
 rm -rf dist/zip && mkdir -p dist/zip && ditto dist/Twinfold.app dist/zip/Twinfold.app && cp packaging/READ-ME-FIRST.txt dist/zip/
 (cd dist/zip && rm -f ../Twinfold-$VERSION.zip && ditto -c -k . ../Twinfold-$VERSION.zip)  # the app plus how to open it the first time
+rm -rf dist/zip
 echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/Twinfold"))"
