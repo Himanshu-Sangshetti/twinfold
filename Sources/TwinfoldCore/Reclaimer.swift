@@ -117,8 +117,8 @@ public struct Reclaimer {
 
         let dir = (path as NSString).deletingLastPathComponent
         let temp = "\(dir)/.twinfold-\(UUID().uuidString.prefix(8))"
-        Safety.inFlight(temp)
-        defer { Safety.inFlight(nil) }
+        let record = Safety.inFlight(temp)
+        defer { Safety.done(record) }
         guard clonefile(keeper, temp, UInt32(CLONE_NOFOLLOW | CLONE_NOOWNERCOPY)) == 0 else {
             return done(.failed, "clone failed: \(String(cString: strerror(errno)))")
         }
@@ -151,23 +151,28 @@ public enum Safety {
         ProcessInfo.processInfo.environment["TWINFOLD_QUIET_SECONDS"].flatMap(Double.init) ?? 300
     }
 
-    static var inFlightURL: URL { Support.directory.appendingPathComponent("in-flight") }
-
-    /// Remembers the temporary clone being made, so one left by a crash or power cut is removed next time.
-    static func inFlight(_ temp: String?) {
-        if let temp {
-            try? FileManager.default.createDirectory(at: Support.directory, withIntermediateDirectories: true)
-            try? temp.write(to: inFlightURL, atomically: false, encoding: .utf8)
-        } else {
-            try? FileManager.default.removeItem(at: inFlightURL)
-        }
+    /// One record per temporary clone being made, named after the process making it, so a run that crashed
+    /// (its process is gone) can be cleaned up next time without ever touching a clone another live run owns.
+    static func inFlight(_ temp: String) -> URL {
+        try? FileManager.default.createDirectory(at: Support.directory, withIntermediateDirectories: true)
+        let record = Support.directory.appendingPathComponent("in-flight-\(getpid())-\(UUID().uuidString.prefix(8))")
+        try? temp.write(to: record, atomically: false, encoding: .utf8)
+        return record
     }
 
-    /// Removes a temporary clone left behind by an interrupted run. Only ever a `.twinfold-` file.
+    static func done(_ record: URL) { try? FileManager.default.removeItem(at: record) }
+
+    /// Removes temporary clones left behind by interrupted runs: only `.twinfold-` files, and only those whose
+    /// process is no longer running.
     public static func cleanUpInterrupted() {
-        guard let temp = try? String(contentsOf: inFlightURL, encoding: .utf8) else { return }
-        FileSystem.removeTemp(temp)
-        try? FileManager.default.removeItem(at: inFlightURL)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: Support.directory.path)) ?? []
+        for name in names where name.hasPrefix("in-flight") {
+            let pid = name.split(separator: "-").dropFirst(2).first.flatMap { Int32($0) }
+            if let pid, kill(pid, 0) == 0 || errno == EPERM { continue }  // still running
+            let record = Support.directory.appendingPathComponent(name)
+            if let temp = try? String(contentsOf: record, encoding: .utf8) { FileSystem.removeTemp(temp) }
+            try? FileManager.default.removeItem(at: record)
+        }
     }
 }
 
@@ -240,8 +245,8 @@ public enum Unfolder {
         guard !openFiles.isOpenForWriting(before) else { return false }
         let dir = (path as NSString).deletingLastPathComponent
         let temp = "\(dir)/.twinfold-\(UUID().uuidString.prefix(8))"
-        Safety.inFlight(temp)
-        defer { Safety.inFlight(nil) }
+        let record = Safety.inFlight(temp)
+        defer { Safety.done(record) }
         // COPYFILE_DATA without COPYFILE_CLONE writes real, unshared blocks.
         guard copyfile(path, temp, nil, copyfile_flags_t(COPYFILE_DATA | COPYFILE_NOFOLLOW)) == 0 else {
             FileSystem.removeTemp(temp)

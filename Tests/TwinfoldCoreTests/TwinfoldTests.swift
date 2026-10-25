@@ -38,6 +38,9 @@ final class Sandbox {
     }
 }
 
+/// Tests that point LaunchAgent at a sandbox through the (process-wide) environment take turns.
+let launchAgentsLock = NSLock()
+
 func random(_ count: Int, seed: UInt8 = 0) -> [UInt8] {
     var g = SystemRandomNumberGenerator()
     var bytes = (0..<count).map { _ in UInt8.random(in: 0...255, using: &g) }
@@ -327,6 +330,8 @@ struct LicenseServerTests {
 
     @Test func launchAgentRunsTheAppWithAutoOnSchedule() throws {
         let box = Sandbox()
+        launchAgentsLock.lock()
+        defer { launchAgentsLock.unlock() }
         setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
         defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
         try LaunchAgent.install(executable: "/Applications/Twinfold.app/Contents/MacOS/Twinfold", frequency: .weekly)
@@ -434,6 +439,8 @@ struct PerformanceTests {
 
     @Test func loginItemOpensTheAppHiddenThroughOpen() throws {
         let box = Sandbox()
+        launchAgentsLock.lock()
+        defer { launchAgentsLock.unlock() }
         setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
         defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
         try LaunchAgent.setOpenAtLogin(app: "/Applications/Twinfold.app", true)
@@ -516,6 +523,8 @@ struct PerformanceTests {
     /// 0.7.0 installed a fixed 3 am schedule; opening the new version replaces it with the hourly check.
     @Test func oldScheduleIsReplaced() throws {
         let box = Sandbox()
+        launchAgentsLock.lock()
+        defer { launchAgentsLock.unlock() }
         setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
         defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
         try FileManager.default.createDirectory(atPath: "\(box.root)/agents", withIntermediateDirectories: true)
