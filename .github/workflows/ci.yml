@@ -16,4 +16,6 @@ jobs:
       - run: scripts/app-e2e.sh
       - run: scripts/bundle.sh
       - run: scripts/user-e2e.sh
+        timeout-minutes: 10
       - run: scripts/update-e2e.sh
+        timeout-minutes: 10

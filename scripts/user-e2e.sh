@@ -37,9 +37,14 @@ export TWINFOLD_SUPPORT_DIR=$TMP/support TWINFOLD_QUIET_SECONDS=0 META=$TMP/meta
 EXPECTED=$(python3 -I -c "import json,sys; g=json.load(open(sys.argv[1]))['groups']; print(sum(sum(len(c) for c in x['clusters'])-1 for x in g))" "$TMP/scan.json")
 python3 -I scripts/tools/manifest.py record "$TMP/scan.json" "$TMP/manifest.jsonl" >/dev/null
 
-open -n -W --env TWINFOLD_SUPPORT_DIR="$TMP/support" --env TWINFOLD_QUIET_SECONDS=0 \
+open -n --env TWINFOLD_SUPPORT_DIR="$TMP/support" --env TWINFOLD_QUIET_SECONDS=0 \
   --env TWINFOLD_UPDATE_URL=http://127.0.0.1:9/none --env TWINFOLD_SAVE_AUTOPILOT="$OUT" --env TWINFOLD_ROOTS="$FIX" \
   dist/Twinfold.app
+for _ in $(seq 1 900); do [ -f "$OUT/save.json" ] && break; sleep 0.2; done
+if [ ! -f "$OUT/save.json" ]; then
+  echo "FAIL  the app didn't finish saving within 3 minutes (running: $(pgrep -lf 'Twinfold.app/Contents/MacOS' | head -2 | tr '\n' ' '))"
+  pkill -f "dist/Twinfold.app/Contents/MacOS/Twinfold" 2>/dev/null || true; exit 1
+fi
 field() { python3 -I -c "import json; print(json.load(open('$OUT/save.json'))['$1'])"; }
 check "the app saved every duplicate Chrome made ($EXPECTED files)" "$(field foldedFiles)" "$EXPECTED"
 check "nothing was left alone" "$(field problems)" 0

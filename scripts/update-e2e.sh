@@ -36,8 +36,10 @@ FAILS=0
 check() { if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 (got $2, expected $3)"; FAILS=$((FAILS + 1)); fi; }
 version() { /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APPS/Twinfold.app/Contents/Info.plist"; }
 launch() {
-  open -n -W --env TWINFOLD_SUPPORT_DIR="$TMP/support" --env TWINFOLD_UPDATE_URL="http://127.0.0.1:$PORT/$1" \
+  open -n --env TWINFOLD_SUPPORT_DIR="$TMP/support" --env TWINFOLD_UPDATE_URL="http://127.0.0.1:$PORT/$1" \
     --env TWINFOLD_UPDATE_AUTOPILOT="$OUT" "$APPS/Twinfold.app" || true
+  for _ in $(seq 1 600); do [ -f "$OUT/update.json" ] && return 0; sleep 0.2; done
+  echo "FAIL  the app didn't report within 2 minutes"; exit 1
 }
 echo '{"license":{"activatedAt":"2026-10-25T14:20:00Z","email":"buyer@example.com","instanceID":"lki_x","key":"K"}}' > "$TMP/support/entitlement.json"
 LICENSE_BEFORE=$(shasum "$TMP/support/entitlement.json" | cut -c1-40)

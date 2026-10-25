@@ -21,7 +21,9 @@ jobs:
           grep -q "mode: Mode = .live" Sources/TwinfoldCore/Licensing.swift || { echo "Store.mode is not .live"; exit 1; }
       - run: scripts/bundle.sh
       - run: scripts/user-e2e.sh
+        timeout-minutes: 10
       - run: scripts/update-e2e.sh
+        timeout-minutes: 10
       - name: Download contains the app and the read-me
         run: |
           VERSION=${GITHUB_REF_NAME#v}
