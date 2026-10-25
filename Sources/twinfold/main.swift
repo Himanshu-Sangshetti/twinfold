@@ -184,7 +184,8 @@ case "reclaim", "fold":
         print("  Freed \(Format.bytes(max(0, summary.freeAfter - summary.freeBefore))). "
             + "\(summary.folded.count.formatted()) files folded, nothing deleted.")
         if !problems.isEmpty {
-            print("  \(problems.count) left as they were (changed or protected while we worked).")
+            print("  \(problems.count) left as they were:")
+            for (reason, count) in summary.leftAlone { print("    \(count.formatted())  \(reason)") }
         }
         if let journal = summary.journal, !summary.folded.isEmpty {
             print("  Undo any time: twinfold undo \"\(Format.path(journal.path))\"")

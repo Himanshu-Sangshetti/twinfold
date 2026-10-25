@@ -56,6 +56,8 @@ final class AppModel {
     var foldTotal = 0
     var freedBytes: Int64 = 0
     var problems = 0
+    /// Why files were left alone in the last save, in plain words, most common first.
+    var leftAlone: [(reason: String, count: Int)] = []
     var foldedFiles = 0
     var foldedBytes: Int64 = 0
     var journal: URL?
@@ -93,17 +95,36 @@ final class AppModel {
         Task { await checkForUpdatesDaily() }
     }
 
-    /// A newer version's number, once the daily check finds one.
-    private(set) var update: String?
+    /// A newer release, once the daily check finds one.
+    private(set) var release: Updates.Release?
+    var update: String? { release?.version }
+    private(set) var updating = false
+    private(set) var updateError: String?
 
     private func checkForUpdatesDaily() async {
         while !Task.isCancelled {
-            if let newer = await Updates.newer() { update = newer }
+            if let newer = await Updates.latest() { release = newer }
             try? await Task.sleep(for: .seconds(24 * 3600))
         }
     }
 
     func downloadUpdate() { NSWorkspace.shared.open(Updates.download) }
+
+    /// Downloads the new version, checks it, swaps it in and reopens. On any problem the app stays as it was.
+    func installUpdate() {
+        guard let release, !updating, Install.canSelfUpdate else { downloadUpdate(); return }
+        updating = true
+        updateError = nil
+        Task {
+            do {
+                try await Updates.install(release, replacing: Install.path)
+                Install.relaunch(Install.path)
+            } catch {
+                updateError = error.localizedDescription
+                updating = false
+            }
+        }
+    }
 
     /// Reloads when another process (the 3 am run, the CLI) writes settings, the license or a journal. Event
     /// driven, so it costs nothing while idle.
@@ -438,6 +459,7 @@ final class AppModel {
                 self.foldedCount = self.foldTotal
                 self.freedBytes = max(summary.freeAfter - summary.freeBefore, 0)
                 self.problems = summary.results.count - summary.folded.count
+                self.leftAlone = Self.plain(summary.leftAlone)
                 self.foldedFiles = summary.folded.count
                 self.foldedBytes = summary.foldedBytes
                 self.journal = summary.journal
@@ -467,6 +489,25 @@ final class AppModel {
                 self.phase = .history
             }
         }
+    }
+
+    /// The engine's reasons, grouped into what they mean for the user.
+    nonisolated static func plain(_ reasons: [(reason: String, count: Int)]) -> [(reason: String, count: Int)] {
+        var groups: [String: Int] = [:]
+        for (reason, count) in reasons {
+            let words: String
+            switch reason {
+            case "changed in the last few minutes": words = "were changed in the last few minutes (next run picks them up)"
+            case "open in another app": words = "were open in another app"
+            case "size changed", "contents differ", "file changed during fold": words = "changed while Twinfold worked"
+            case "protected file": words = "are locked, hard-linked or belong to another user"
+            case "different volume": words = "are on another disk than their twin"
+            case let r where r.hasPrefix("metadata could not be kept"): words = "have settings macOS wouldn't let Twinfold keep exactly"
+            default: words = "couldn't be changed (macOS didn't allow it)"
+            }
+            groups[words, default: 0] += count
+        }
+        return groups.map { ($0.key, $0.value) }.sorted { $0.count > $1.count }
     }
 
     nonisolated static func describe(_ r: Run.UndoResult) -> String {

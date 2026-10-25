@@ -216,6 +216,49 @@ enum Snapshot {
         exit(0)
     }
 
+    /// `TWINFOLD_SAVE_AUTOPILOT=<dir> TWINFOLD_ROOTS=<folders>`: what a user does, nothing else. Scan, press
+    /// Save with everything ticked, and record what the done screen says (and how it looks).
+    static func saveAutopilot(_ model: AppModel) async {
+        let env = ProcessInfo.processInfo.environment
+        guard let dir = env["TWINFOLD_SAVE_AUTOPILOT"], let roots = env["TWINFOLD_ROOTS"] else { return }
+        let out = URL(fileURLWithPath: dir)
+        model.reset()
+        model.roots = roots.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
+        model.scan()
+        for _ in 0..<3000 where model.phase != .results && model.phase != .nothing { try? await Task.sleep(for: .milliseconds(100)) }
+        let found = model.selectedBytes
+        model.fold()
+        for _ in 0..<6000 where model.phase != .done { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .seconds(1))
+        if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView {
+            window.effectiveAppearance.performAsCurrentDrawingAppearance {
+                if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("done.png"))
+                }
+            }
+        }
+        let info: [String: Any] = ["found": found, "foldedFiles": model.foldedFiles, "foldedBytes": model.foldedBytes,
+                                   "problems": model.problems,
+                                   "leftAlone": model.leftAlone.map { "\($0.count) \($0.reason)" }]
+        try? JSONSerialization.data(withJSONObject: info).write(to: out.appendingPathComponent("save.json"))
+        exit(0)
+    }
+
+    /// `TWINFOLD_UPDATE_AUTOPILOT=<dir>`: presses Update & Restart once the newer release shows up. On success the
+    /// app replaces itself and reopens; on failure it writes `<dir>/update.json` with what it said.
+    static func updateAutopilot(_ model: AppModel) async {
+        guard let dir = ProcessInfo.processInfo.environment["TWINFOLD_UPDATE_AUTOPILOT"] else { return }
+        for _ in 0..<200 where model.release == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        model.installUpdate()
+        for _ in 0..<600 where model.updating || (model.updateError == nil && model.release != nil) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let info: [String: Any] = ["error": model.updateError ?? "", "found": model.update ?? ""]
+        try? JSONSerialization.data(withJSONObject: info).write(to: URL(fileURLWithPath: dir).appendingPathComponent("update.json"))
+        exit(0)
+    }
+
     static func write(_ view: some View, to url: URL, scale: CGFloat = 2) {
         let renderer = ImageRenderer(content: view)
         renderer.scale = scale

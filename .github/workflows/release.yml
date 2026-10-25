@@ -20,6 +20,8 @@ jobs:
           grep -q "static let version = \"$VERSION\"" Sources/TwinfoldCore/Licensing.swift || { echo "Updates.version is not $VERSION"; exit 1; }
           grep -q "mode: Mode = .live" Sources/TwinfoldCore/Licensing.swift || { echo "Store.mode is not .live"; exit 1; }
       - run: scripts/bundle.sh
+      - run: scripts/user-e2e.sh
+      - run: scripts/update-e2e.sh
       - name: Download contains the app and the read-me
         run: |
           VERSION=${GITHUB_REF_NAME#v}

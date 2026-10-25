@@ -553,13 +553,20 @@ struct DoneView: View {
                 DiskBar(total: model.diskTotal, free: max(0, model.diskFree - model.freedBytes), saving: model.freedBytes)
                     .padding(.horizontal, 20)
             }
-            Label("All \(Format.count(model.foldedFiles, "file was", "files were")) compared byte for byte with their twin right before sharing space.",
-                  systemImage: "checkmark.seal")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.fold)
-            if model.problems > 0 {
-                Text("\(model.problems.formatted()) files changed while we worked, so we left them alone.")
-                    .font(.system(size: 13)).foregroundStyle(Color.quiet)
+            if model.foldedFiles > 0 {
+                Label("All \(Format.count(model.foldedFiles, "file was", "files were")) compared byte for byte with their twin right before sharing space.",
+                      systemImage: "checkmark.seal")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.fold)
+            }
+            if !model.leftAlone.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Left as they were, untouched:").font(.system(size: 13, weight: .medium))
+                    ForEach(model.leftAlone.prefix(3), id: \.reason) { item in
+                        Text("\(item.count.formatted()) \(item.reason)").font(.system(size: 13))
+                    }
+                }
+                .foregroundStyle(Color.quiet)
             }
             if let example = model.example {
                 VStack(alignment: .leading, spacing: 8) {
@@ -823,14 +830,24 @@ struct UpdateBanner: View {
                 Image(systemName: "arrow.down.circle.fill").font(.system(size: 18)).foregroundStyle(Color.fold)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Twinfold \(update) is out").font(.system(size: 13, weight: .semibold))
-                    Text("Download it, quit Twinfold, then drag the new one into Applications and replace the old one. Your Pro license, settings and History stay.")
+                    Text(model.updateError.map { "\($0) You can download it instead." }
+                         ?? (Install.canSelfUpdate
+                             ? "Updates in a few seconds and reopens. Your Pro license, settings and History stay."
+                             : "Download it, quit Twinfold, then drag the new one into Applications and replace the old one. Your Pro license, settings and History stay."))
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.quiet)
+                        .foregroundStyle(model.updateError == nil ? Color.quiet : .orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Link("What's new", destination: Updates.notes).font(.system(size: 12))
-                GlassButton(title: "Download") { model.downloadUpdate() }
+                if model.updating {
+                    ProgressView().controlSize(.small)
+                    Text("Updating…").font(.system(size: 12))
+                } else if Install.canSelfUpdate, model.updateError == nil {
+                    GlassButton(title: "Update & Restart") { model.installUpdate() }
+                } else {
+                    GlassButton(title: "Download") { model.downloadUpdate() }
+                }
             }
             .padding(14)
             .frame(maxWidth: 760)
@@ -853,7 +870,9 @@ struct MenuBarContent: View {
             Text("Last run \(last.formatted(.relative(presentation: .named))): \(model.settings.lastAutoSaved > 0 ? "saved " + Format.bytes(model.settings.lastAutoSaved) : "nothing new")")
         }
         if let update = model.update {
-            Button("Download Twinfold \(update)…") { model.downloadUpdate() }
+            Button(Install.canSelfUpdate ? "Update to Twinfold \(update) and Restart" : "Download Twinfold \(update)…") {
+                model.installUpdate()
+            }
         }
         Divider()
         Button(model.autoRunning ? "Running…" : "Run Now") { model.runAutomaticNow() }.disabled(model.autoRunning)

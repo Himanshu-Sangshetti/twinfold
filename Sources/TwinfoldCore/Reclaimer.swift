@@ -36,6 +36,13 @@ public struct ReclaimSummary: Sendable {
 
     public var folded: [FoldResult] { results.filter { $0.outcome == .folded } }
     public var foldedBytes: Int64 { folded.reduce(0) { $0 + $1.freedBytes } }
+
+    /// Why files were left as they were, most common first, so nothing is reported under the wrong name.
+    public var leftAlone: [(reason: String, count: Int)] {
+        Dictionary(grouping: results.filter { $0.outcome != .folded }, by: { $0.reason ?? "unknown" })
+            .map { ($0.key, $0.value.count) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.reason < $1.reason }
+    }
 }
 
 /// Replaces duplicate files with clones of a single keeper, one file at a time.

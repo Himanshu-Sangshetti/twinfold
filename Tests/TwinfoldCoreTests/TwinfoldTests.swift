@@ -471,3 +471,15 @@ struct PerformanceTests {
         #expect(report.groups.first?.files.allSatisfy { !$0.contains(".app/") } == true)
     }
 }
+
+@Suite struct UpdateInstallTests {
+    @Test func readsTheChecksumForTheDownload() {
+        let listing = """
+            3e571d35b4e45c279c07a067ef1eca1189f5fb539299907c6a8b98d707933461  dist/Twinfold-0.7.1.zip
+            0c0a4fd57e75cc38b9c13d501fecd274261fd574c19679bb618d6423209d0c46  dist/twinfold-0.7.1-macos.tar.gz
+            """
+        #expect(Updates.checksum(for: "Twinfold-0.7.1.zip", in: listing)
+            == "3e571d35b4e45c279c07a067ef1eca1189f5fb539299907c6a8b98d707933461")
+        #expect(Updates.checksum(for: "Twinfold-0.7.2.zip", in: listing) == nil)
+    }
+}

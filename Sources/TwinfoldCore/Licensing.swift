@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Twinfold Pro. Everything in the app, the command line tool and the source are free and unlimited; a one-time
@@ -128,16 +129,117 @@ public enum Updates {
             ?? "https://api.github.com/repos/Himanshu-Sangshetti/twinfold/releases/latest")!
     }
 
-    /// The newer version's number, or nil when this one is the latest (or the check couldn't run).
-    public static func newer() async -> String? {
+    /// A published version: its number, the app download and the file listing every download's SHA-256.
+    public struct Release: Sendable, Equatable {
+        public let version: String
+        public let zip: URL
+        public let checksums: URL
+    }
+
+    /// The newer release, or nil when this one is the latest (or the check couldn't run).
+    public static func latest() async -> Release? {
         var request = URLRequest(url: feed, timeoutInterval: 15)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
-              let tag = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["tag_name"] as? String
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = json["tag_name"] as? String
         else { return nil }
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-        return isNewer(latest, than: version) ? latest : nil
+        guard isNewer(latest, than: version) else { return nil }
+        let assets = (json["assets"] as? [[String: Any]] ?? []).reduce(into: [String: URL]()) { all, asset in
+            if let name = asset["name"] as? String, let url = (asset["browser_download_url"] as? String).flatMap(URL.init) {
+                all[name] = url
+            }
+        }
+        let fallback = notes.deletingLastPathComponent().appendingPathComponent("download/\(tag)")
+        return Release(version: latest,
+                       zip: assets["Twinfold-\(latest).zip"] ?? fallback.appendingPathComponent("Twinfold-\(latest).zip"),
+                       checksums: assets["checksums.txt"] ?? fallback.appendingPathComponent("checksums.txt"))
+    }
+
+    /// The newer version's number, or nil when this one is the latest.
+    public static func newer() async -> String? { await latest()?.version }
+
+    public enum InstallError: LocalizedError, Equatable {
+        case download(String), checksum, notAnApp, wrongVersion(String), signature, replace(String)
+        public var errorDescription: String? {
+            switch self {
+            case .download(let why): "The download didn't finish (\(why))."
+            case .checksum: "The download didn't match the published checksum, so it wasn't installed."
+            case .notAnApp: "The download didn't contain Twinfold."
+            case .wrongVersion(let v): "The download was version \(v), not the one expected."
+            case .signature: "The downloaded app's signature didn't check out, so it wasn't installed."
+            case .replace(let why): "Couldn't replace the app (\(why))."
+            }
+        }
+    }
+
+    /// The SHA-256 listed for `file` in a `shasum -a 256` listing (paths may carry a folder).
+    public static func checksum(for file: String, in listing: String) -> String? {
+        for line in listing.split(separator: "\n") {
+            let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            let name = parts[1].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "*"))
+            if (name as NSString).lastPathComponent == file { return parts[0].lowercased() }
+        }
+        return nil
+    }
+
+    /// Downloads `release`, checks it against the published SHA-256, its version and signature, then puts it in
+    /// place of the app at `appPath` (the old one is moved aside first and put back if anything fails).
+    /// Nothing changes unless every check passes.
+    public static func install(_ release: Release, replacing appPath: String) async throws {
+        func fetch(_ url: URL) async throws -> Data {
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw InstallError.download("HTTP error") }
+                return data
+            } catch let e as InstallError { throw e } catch { throw InstallError.download(error.localizedDescription) }
+        }
+        let zipName = "Twinfold-\(release.version).zip"
+        let listing = String(decoding: try await fetch(release.checksums), as: UTF8.self)
+        let zip = try await fetch(release.zip)
+        let digest = SHA256.hash(data: zip).map { String(format: "%02x", $0) }.joined()
+        guard let expected = checksum(for: zipName, in: listing), expected == digest else { throw InstallError.checksum }
+
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("twinfold-update-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: work) }
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        try zip.write(to: work.appendingPathComponent(zipName))
+        guard run("/usr/bin/ditto", "-x", "-k", work.appendingPathComponent(zipName).path, work.appendingPathComponent("x").path)
+        else { throw InstallError.notAnApp }
+        let app = work.appendingPathComponent("x/Twinfold.app")
+        let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
+        guard let got = info?["CFBundleShortVersionString"] as? String else { throw InstallError.notAnApp }
+        guard got == release.version else { throw InstallError.wrongVersion(got) }
+        guard run("/usr/bin/codesign", "--verify", "--deep", "--strict", app.path) else { throw InstallError.signature }
+
+        let target = URL(fileURLWithPath: appPath)
+        let aside = target.deletingLastPathComponent().appendingPathComponent(".Twinfold-previous-\(version).app")
+        try? FileManager.default.removeItem(at: aside)
+        do {
+            try FileManager.default.moveItem(at: target, to: aside)
+        } catch { throw InstallError.replace(error.localizedDescription) }
+        do {
+            try FileManager.default.moveItem(at: app, to: target)
+        } catch {
+            try? FileManager.default.moveItem(at: aside, to: target)
+            throw InstallError.replace(error.localizedDescription)
+        }
+        try? FileManager.default.removeItem(at: aside)
+    }
+
+    @discardableResult
+    static func run(_ tool: String, _ args: String...) -> Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = args
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
     }
 
     public static func isNewer(_ a: String, than b: String) -> Bool {

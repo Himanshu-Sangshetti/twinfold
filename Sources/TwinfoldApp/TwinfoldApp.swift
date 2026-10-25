@@ -69,6 +69,8 @@ struct TwinfoldApp: App {
                     await Snapshot.proAutopilot(model)
                     await Snapshot.liveAutopilot(model)
                     await Snapshot.sheetShot(model)
+                    await Snapshot.saveAutopilot(model)
+                    await Snapshot.updateAutopilot(model)
                 }
         }
         .windowStyle(.hiddenTitleBar)

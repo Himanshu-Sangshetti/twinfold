@@ -2,6 +2,12 @@
 
 ## 0.7.1
 
+- **Saving now works on files made by other apps.** macOS tags every file with the app that created it (`com.apple.provenance`), and a clone always gets the cloning app's tag; nothing can set it. The safety check counted that as a difference, so the downloaded app left almost every file alone. Twinfold now ignores only that tag; contents, permissions, dates, Finder tags, quarantine and every other attribute are still checked exactly.
+- Files left alone are reported with the real reason (in use, changed recently, locked, …) in the app and the command line, instead of "changed while we worked".
+- **Update & Restart:** when a new version is out, Twinfold downloads it, checks it against the published SHA-256 and its signature, replaces itself and reopens. Your license, settings and History stay. Anything off and nothing changes.
+- Automatic is only set up from the Applications folder (opened straight from Downloads, macOS runs a temporary copy that's gone after a restart); a banner explains how to move it.
+- Scans leave apps (`.app`) and the Music and TV media folders alone, so macOS doesn't ask about app management or the media library.
+- The license key field always shows the pasted key, and has a Paste button.
 - With Automatic on, Twinfold now lives in the menu bar: closing the window keeps it running there (no Dock icon), and it starts there, without a window, when you log in. A switch in Automatic turns this off. With Automatic off, closing the window quits as before.
 - The app notices when a newer version is out (one request to GitHub a day) and shows how to update; your license and settings carry over.
 - The open app now picks up overnight runs by itself, and only one save or undo runs at a time across the app, the overnight run and the command line, so they never get in each other's way.

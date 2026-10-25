@@ -152,11 +152,17 @@ enum FileSystem {
         return value
     }
 
+    /// Attributes only macOS can write, which it sets on every new file itself, so no app can carry them over:
+    /// com.apple.provenance names the app that created a file (a clone gets the cloning app's). Finder's own
+    /// Duplicate changes it the same way. Everything else must match exactly.
+    static let systemManaged: Set<String> = ["com.apple.provenance"]
+
     /// Makes `target`'s extended attributes exactly `source`'s. The clone starts with the keeper's,
     /// so those are cleared first. Attributes the system won't let us remove or set are caught by
     /// the metadata check afterwards, which then leaves the file alone.
     static func copyXattrs(from source: String, to target: String) -> Bool {
-        guard let wanted = xattrNames(source), let existing = xattrNames(target) else { return false }
+        guard let wanted = xattrNames(source)?.filter({ !systemManaged.contains($0) }),
+              let existing = xattrNames(target)?.filter({ !systemManaged.contains($0) }) else { return false }
         for name in existing where !wanted.contains(name) { removexattr(target, name, XATTR_NOFOLLOW) }
         for name in wanted {
             guard let value = xattr(source, name) else { return false }
@@ -223,7 +229,7 @@ enum FileSystem {
         guard Darwin.lstat(path, &st) == 0, let t = times(path) else { return nil }
         guard let names = xattrNames(path) else { return nil }
         var xattrs: [String: [UInt8]] = [:]
-        for name in names {
+        for name in names where !systemManaged.contains(name) {
             guard let value = xattr(path, name) else { return nil }
             xattrs[name] = value
         }

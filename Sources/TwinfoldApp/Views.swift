@@ -125,6 +125,10 @@ struct FolderList: View {
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
+        // The outline view can keep a stale row height after its contents change, leaving a blank gap under
+        // a row: fixed-height rows, and a fresh list whenever the top-level folders change.
+        .environment(\.defaultMinListRowHeight, 30)
+        .id(tree?.children.map(\.path) ?? [])
     }
 }
 
@@ -156,7 +160,7 @@ struct FolderRow: View {
                 .foregroundStyle(included ? Color.primary : Color.quiet)
                 .frame(width: 70, alignment: .trailing)
         }
-        .padding(.vertical, 2)
+        .frame(height: 26)
         .contextMenu { Button("Show in Finder") { model.reveal([node.path]) } }
     }
 }

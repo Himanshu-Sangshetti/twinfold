@@ -57,6 +57,9 @@ static int describe(const char *path) {
         for (char *p = names; p < names + size && n < 256; p += strlen(p) + 1) list[n++] = p;
         qsort(list, n, sizeof *list, cmp);
         for (int i = 0; i < n; i++) {
+            // macOS stamps every new file with the creating app (com.apple.provenance) and no app can set it,
+            // so a clone always gets the cloning app's. Twinfold leaves it out of "unchanged"; so does this.
+            if (strcmp(list[i], "com.apple.provenance") == 0) continue;
             ssize_t len = getxattr(path, list[i], NULL, 0, 0, XATTR_NOFOLLOW);
             unsigned char *v = malloc(len > 0 ? len : 1), digest[CC_SHA256_DIGEST_LENGTH];
             getxattr(path, list[i], v, len, 0, XATTR_NOFOLLOW);
