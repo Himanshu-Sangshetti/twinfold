@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import IOKit.ps
 
 /// What the user chose once and Twinfold remembers: folders to leave alone and the automatic schedule.
 public struct Settings: Codable, Sendable, Equatable {
@@ -12,9 +14,6 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Start in the menu bar at login while Automatic is on. Optional so settings from 0.7.0 and earlier still
     /// load; nil means on.
     public var openAtLogin: Bool?
-    /// Hour of the automatic run, 0–23. Optional so older settings still load; nil means 3 am.
-    public var hour: Int?
-    public var runHour: Int { min(max(hour ?? 3, 0), 23) }
 
     /// Twinfold stays in the menu bar when its window closes, and starts there at login.
     public var livesInMenuBar: Bool { automatic != .off && openAtLogin != false }
@@ -28,7 +27,7 @@ public struct Settings: Codable, Sendable, Equatable {
         return (try? JSONDecoder().decode(Settings.self, from: data)) ?? Settings()
     }
 
-    /// Keeps the newest automatic-run result on disk: the overnight run is a separate process, so an app that
+    /// Keeps the newest automatic-run result on disk: the scheduled run is a separate process, so an app that
     /// was open the whole time must not write back its older copy.
     public func save(to url: URL = Settings.url) {
         var settings = self
@@ -147,6 +146,52 @@ public struct Run: Identifiable, Sendable {
 
 /// The unattended run behind Automatic mode: scan the watched folders, skip the ones left alone, fold the rest.
 public enum AutoRun {
+    /// What the hourly check needs to know about the Mac right now.
+    public struct Conditions: Sendable, Equatable {
+        public var idleSeconds: Double
+        public var onPower: Bool
+        public var battery: Int?  // percent, nil without a battery
+
+        public init(idleSeconds: Double, onPower: Bool, battery: Int?) {
+            self.idleSeconds = idleSeconds
+            self.onPower = onPower
+            self.battery = battery
+        }
+
+        /// Read from the system: seconds since the last keyboard or mouse input, and the power source.
+        /// `TWINFOLD_IDLE_SECONDS` and `TWINFOLD_ON_POWER` stand in for the readings (tests).
+        public static func now() -> Conditions {
+            let idle = ProcessInfo.processInfo.environment["TWINFOLD_IDLE_SECONDS"].flatMap(Double.init)
+                ?? CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+            let onPower = ProcessInfo.processInfo.environment["TWINFOLD_ON_POWER"].map { $0 == "1" }
+                ?? ((IOPSGetProvidingPowerSourceType(info).takeUnretainedValue() as String) == kIOPMACPowerKey)
+            var battery: Int?
+            for source in IOPSCopyPowerSourcesList(info).takeRetainedValue() as Array {
+                if let d = IOPSGetPowerSourceDescription(info, source).takeUnretainedValue() as? [String: Any],
+                   let now = d[kIOPSCurrentCapacityKey] as? Int, let max = d[kIOPSMaxCapacityKey] as? Int, max > 0 {
+                    battery = now * 100 / max
+                }
+            }
+            return Conditions(idleSeconds: idle, onPower: onPower, battery: battery)
+        }
+    }
+
+    /// Whether the hourly check should save now: it's been a day (or a week) since the last run, nobody has
+    /// touched the Mac for 10 minutes, and it's plugged in or at least half charged.
+    public static func isDue(_ settings: Settings, now: Date = Date(), conditions: Conditions) -> Bool {
+        let period: TimeInterval
+        switch settings.automatic {
+        case .off: return false
+        case .daily: period = 20 * 3600
+        case .weekly: period = 6.5 * 86400
+        }
+        let due = now.timeIntervalSince(settings.lastAutoRun ?? .distantPast) >= period
+        let idle = conditions.idleSeconds >= 600
+        let power = conditions.onPower || (conditions.battery ?? 100) >= 50
+        return due && idle && power
+    }
+
     @discardableResult
     public static func run(settings: inout Settings, now: Date = Date()) -> ReclaimSummary {
         var options = ScanOptions(roots: settings.watched)
@@ -174,27 +219,30 @@ public enum LaunchAgent {
     public static var url: URL { directory.appendingPathComponent("\(label).plist") }
     static var managed: Bool { ProcessInfo.processInfo.environment["TWINFOLD_LAUNCH_AGENTS"] == nil }
 
-    /// The plist: every day, or on Sundays, at `hour`. launchd runs a job missed while the Mac was asleep as soon
-    /// as it wakes; one missed while it was shut down waits for the next time.
-    public static func plist(executable: String, frequency: Settings.Frequency, hour: Int = 3) -> [String: Any] {
-        var interval: [String: Int] = ["Hour": hour, "Minute": 0]
-        if frequency == .weekly { interval["Weekday"] = 0 }
-        return [
+    /// The plist: a quiet check every hour; `--auto` itself decides whether it's time (see `AutoRun.isDue`).
+    public static func plist(executable: String, frequency: Settings.Frequency) -> [String: Any] {
+        [
             "Label": label,
             "ProgramArguments": [executable, "--auto"],
-            "StartCalendarInterval": interval,
+            "StartInterval": 3600,
             "ProcessType": "Background",
             "LowPriorityIO": true,
             "Nice": 10,
         ]
     }
 
-    public static func install(executable: String, frequency: Settings.Frequency, hour: Int = 3) throws {
+    /// Whether the installed schedule is exactly the one this version would write (path and timing).
+    public static func isCurrent(executable: String, frequency: Settings.Frequency) -> Bool {
+        guard let installed = NSDictionary(contentsOf: url) else { return false }
+        return installed.isEqual(to: plist(executable: executable, frequency: frequency))
+    }
+
+    public static func install(executable: String, frequency: Settings.Frequency) throws {
         remove()
         guard frequency != .off else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try PropertyListSerialization.data(
-            fromPropertyList: plist(executable: executable, frequency: frequency, hour: hour), format: .xml, options: 0)
+            fromPropertyList: plist(executable: executable, frequency: frequency), format: .xml, options: 0)
         try data.write(to: url, options: .atomic)
         if managed { launchctl("bootstrap", "gui/\(getuid())", url.path) }
     }
@@ -225,7 +273,7 @@ public enum LaunchAgent {
         try data.write(to: menuBarURL, options: .atomic)
     }
 
-    /// The app the 3 am schedule currently runs, if it's set up.
+    /// The app the schedule currently runs, if it's set up.
     public static var installedExecutable: String? {
         guard let data = try? Data(contentsOf: url),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]

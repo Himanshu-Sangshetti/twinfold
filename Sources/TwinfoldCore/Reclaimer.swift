@@ -257,7 +257,7 @@ public enum Unfolder {
     }
 }
 
-/// One save or undo at a time across every Twinfold process (the app, the overnight run, the CLI), so one never
+/// One save or undo at a time across every Twinfold process (the app, the scheduled run, the CLI), so one never
 /// clears another's in-flight temp file or reads a journal mid-write. Later callers wait their turn.
 public enum RunLock {
     public static func withLock<T>(_ body: () throws -> T) rethrows -> T {

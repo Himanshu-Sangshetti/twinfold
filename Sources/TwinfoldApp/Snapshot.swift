@@ -168,7 +168,7 @@ enum Snapshot {
     }
 
     /// `TWINFOLD_LIVE_AUTOPILOT=<dir>` checks what the open app picks up by itself: the update notice (from
-    /// `TWINFOLD_UPDATE_URL`), then, once `<dir>/go` exists, an overnight run done by another process.
+    /// `TWINFOLD_UPDATE_URL`), then, once `<dir>/go` exists, a scheduled run done by another process.
     static func liveAutopilot(_ model: AppModel) async {
         guard let dir = ProcessInfo.processInfo.environment["TWINFOLD_LIVE_AUTOPILOT"] else { return }
         let out = URL(fileURLWithPath: dir)

@@ -2,7 +2,7 @@ import AppKit
 import TwinfoldCore
 
 /// Where this copy of Twinfold runs from. Opened straight from Downloads, macOS runs it from a temporary copy
-/// (App Translocation) whose path is gone after a restart, so the 3 am schedule and the login item may only be
+/// (App Translocation) whose path is gone after a restart, so the schedule and the login item may only be
 /// set up from Applications.
 enum Install {
     static var path: String { Bundle.main.bundlePath }

@@ -87,8 +87,8 @@ final class AppModel {
         }
         // After an update (or a move), point the schedule and the login item at this copy of the app.
         if let exe = Bundle.main.executablePath, Install.canSchedule, settings.automatic != .off,
-           LaunchAgent.installedExecutable != exe {
-            try? LaunchAgent.install(executable: exe, frequency: settings.automatic, hour: settings.runHour)
+           !LaunchAgent.isCurrent(executable: exe, frequency: settings.automatic) {
+            try? LaunchAgent.install(executable: exe, frequency: settings.automatic)
         }
         applyOpenAtLogin()
         watchSupportFolder()
@@ -126,7 +126,7 @@ final class AppModel {
         }
     }
 
-    /// Reloads when another process (the 3 am run, the CLI) writes settings, the license or a journal. Event
+    /// Reloads when another process (the scheduled run, the CLI) writes settings, the license or a journal. Event
     /// driven, so it costs nothing while idle.
     private var watchers: [DispatchSourceFileSystemObject] = []
     private func watchSupportFolder() {
@@ -329,7 +329,7 @@ final class AppModel {
 
     // MARK: Automatic (Pro)
 
-    /// Turns the schedule on or off; on means launchd runs this app with --auto at 3 am.
+    /// Turns the schedule on or off; on means launchd runs this app with --auto every hour (it runs when due and the Mac is idle).
     func setAutomatic(_ frequency: Settings.Frequency) {
         guard entitlement.unlocked || frequency == .off else { return }
         // A schedule pointing at a temporary copy would silently stop working; move the app first.
@@ -337,21 +337,13 @@ final class AppModel {
         settings.automatic = frequency
         settings.save()
         if frequency != .off, Bundle.main.bundlePath.hasSuffix(".app") {
-            // Ask once, now, so the overnight run can say what it saved.
+            // Ask once, now, so the scheduled run can say what it saved.
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
         }
         if let exe = Bundle.main.executablePath, Install.canSchedule {
-            try? LaunchAgent.install(executable: exe, frequency: frequency, hour: settings.runHour)
+            try? LaunchAgent.install(executable: exe, frequency: frequency)
         }
         applyOpenAtLogin()
-    }
-
-    func setHour(_ hour: Int) {
-        settings.hour = hour
-        settings.save()
-        if let exe = Bundle.main.executablePath, Install.canSchedule, settings.automatic != .off {
-            try? LaunchAgent.install(executable: exe, frequency: settings.automatic, hour: settings.runHour)
-        }
     }
 
     func setOpenAtLogin(_ on: Bool) {
@@ -366,7 +358,7 @@ final class AppModel {
         try? LaunchAgent.setOpenAtLogin(app: Bundle.main.bundlePath, settings.livesInMenuBar && entitlement.unlocked)
     }
 
-    /// The overnight run and the CLI write to the same files from other processes; read them again.
+    /// The scheduled run and the CLI write to the same files from other processes; read them again.
     func reloadFromDisk() {
         settings = Settings.load()
         entitlement = Entitlement.load()

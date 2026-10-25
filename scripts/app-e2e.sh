@@ -15,6 +15,8 @@ FIX=$TMP/fixture OUT=$TMP/out
 export TWINFOLD_SUPPORT_DIR=$TMP/support
 export TWINFOLD_QUIET_SECONDS=0
 export TWINFOLD_UPDATE_URL=http://127.0.0.1:9/no-update-checks-in-tests
+# The hourly automatic check reads idle time and power; state them so results don't depend on the keyboard.
+export TWINFOLD_IDLE_SECONDS=3600 TWINFOLD_ON_POWER=1
 mkdir -p "$FIX" "$OUT"
 
 # 0keep holds the originals (sorts first, so it is kept); A holds 2 copies of an 80 MB file, B one copy of 40 MB.
@@ -122,10 +124,12 @@ check "license remembered on disk" "$(pro savedToDisk)" True
 check "license shows the buyer's email" "$(pro email)" buyer@example.com
 check "Automatic switches on once unlocked" "$(pro automatic)" weekly
 check "closing the window keeps Twinfold running with Automatic on" "$(python3 -I -c "import json; print(json.load(open('$OUT/alive-after-close.json'))['visibleWindows'])" 2>/dev/null || echo app-quit)" 0
+TWINFOLD_IDLE_SECONDS=20 "$BIN/TwinfoldApp" --auto
+check "while someone is using the Mac, the hourly check saves nothing" "$(reclaimable)" 160000000
 "$BIN/TwinfoldApp" --auto
 check "with the license, an automatic run (no test bypass) saves the 160 MB set" "$(reclaimable)" 0
 
-# The open app picks things up by itself: the update notice, and a 3 am run done by another process.
+# The open app picks things up by itself: the update notice, and a scheduled run done by another process.
 LIVE=$TMP/live FEED=$TMP/feed
 mkdir -p "$LIVE" "$FEED" "$FIX/C"
 cp "$FIX/0keep/f2.bin" "$FIX/C/f2.bin"
@@ -144,10 +148,12 @@ until_file() { for _ in $(seq 1 300); do [ -f "$1" ] && return 0; sleep 0.2; don
 TWINFOLD_LIVE_AUTOPILOT=$LIVE TWINFOLD_UPDATE_URL="http://127.0.0.1:$FEEDPORT/newer.json" "$BIN/TwinfoldApp" >/dev/null 2>&1 &
 APP=$!
 until_file "$LIVE/ready"
+# The last run was a week ago, so the hourly check is due.
+python3 -I -c "import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop('lastAutoRun', None); json.dump(d, open(p,'w'))" "$TWINFOLD_SUPPORT_DIR/settings.json"
 "$BIN/TwinfoldApp" --auto
 touch "$LIVE/go"; wait $APP || true
 check "the open app shows when a newer version is out" "$(live update)" 9.9.9
-check "the open app shows the 3 am run (done by another process) without reopening" "$(live savedAfter)" 40000000
+check "the open app shows the scheduled run (done by another process) without reopening" "$(live savedAfter)" 40000000
 cp "$LIVE/update-banner.png" "$OUT/" 2>/dev/null || true
 
 rm -f "$LIVE"/*; touch "$LIVE/go"
@@ -164,7 +170,7 @@ rm -f "$LIVE"/*
 TWINFOLD_LAUNCH_PROBE=$LIVE "$BIN/TwinfoldApp" --menubar >/dev/null 2>&1 || true
 check "with 'keep in menu bar' off, it opens as a normal window" "$(python3 -I -c "import json; print(json.load(open('$LIVE/launch.json'))['visibleWindows'])")" 1
 
-# Two saves at once (the 3 am run while the app saves): one waits for the other; every file stays intact.
+# Two saves at once (the scheduled run while the app saves): one waits for the other; every file stays intact.
 TWO=$TMP/two; mkdir -p "$TWO"
 python3 -I -c "import os,sys; d=os.urandom(30_000_000); [open(os.path.join(sys.argv[1], f'c{i}.bin'),'wb').write(d) for i in range(6)]" "$TWO"
 TWO_BEFORE=$(cd "$TWO" && shasum -a 256 * | sort)

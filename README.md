@@ -62,7 +62,7 @@ license, settings and History stay.
 folders you leave alone remembered, the command line tool, and the source code.
 
 **Twinfold Pro, $12 once** (no subscription, up to 3 Macs) adds **Automatic**: Twinfold checks your
-folders every day or week at the time you choose (3 am by default, or as soon as the Mac wakes after it) and stores new duplicates once, with a menu bar item showing what it saved.
+folders once a day or week, when your Mac is idle and plugged in (or more than half charged), and stores new duplicates once, with a menu bar item showing what it saved.
 Twinfold stays in the menu bar when you close its window and starts there when you log in (you can turn that
 off). Every automatic run shows up in History and can be undone.
 

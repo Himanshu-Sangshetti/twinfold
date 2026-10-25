@@ -8,7 +8,7 @@
 - Automatic is only set up from the Applications folder (opened straight from Downloads, macOS runs a temporary copy that's gone after a restart); a banner explains how to move it.
 - Scans leave apps (`.app`) and the Music and TV media folders alone, so macOS doesn't ask about app management or the media library.
 - The license key field always shows the pasted key, and has a Paste button.
-- Choose when Automatic runs (3 am by default). A run missed while the Mac was asleep happens as soon as it wakes.
+- Automatic no longer runs at a fixed 3 am (which on a laptop meant "the moment you open it"). It checks every hour and runs once a day or week when the Mac is idle for 10 minutes and plugged in or more than half charged. Schedules from 0.7.0 are replaced on first launch.
 - With Automatic on, Twinfold now lives in the menu bar: closing the window keeps it running there (no Dock icon), and it starts there, without a window, when you log in. A switch in Automatic turns this off. With Automatic off, closing the window quits as before.
 - The app notices when a newer version is out (one request to GitHub a day) and shows how to update; your license and settings carry over.
 - The open app now picks up overnight runs by itself, and only one save or undo runs at a time across the app, the overnight run and the command line, so they never get in each other's way.

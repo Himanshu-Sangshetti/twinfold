@@ -86,7 +86,9 @@ struct TwinfoldApp: App {
     static func runAutomaticIfRequested() {
         guard CommandLine.arguments.contains("--auto") else { return }
         var settings = Settings.load()
-        if Entitlement.load().unlocked || ProcessInfo.processInfo.environment["TWINFOLD_FORCE_AUTO"] == "1" {
+        let licensed = Entitlement.load().unlocked || ProcessInfo.processInfo.environment["TWINFOLD_FORCE_AUTO"] == "1"
+        // The hourly check: only when it's due and the Mac is idle and has power; otherwise try next hour.
+        if licensed, AutoRun.isDue(settings, conditions: .now()) {
             AutoRun.run(settings: &settings)
             settings.save()
             if settings.lastAutoSaved > 0 { notify(saved: settings.lastAutoSaved) }
@@ -94,7 +96,7 @@ struct TwinfoldApp: App {
         exit(0)
     }
 
-    /// "Saved 1.2 GB overnight", only when something was saved. Waits briefly so the post goes out before exit.
+    /// "Saved 1.2 GB", only when something was saved. Waits briefly so the post goes out before exit.
     static func notify(saved: Int64) {
         guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
         let content = UNMutableNotificationContent()

@@ -332,7 +332,7 @@ struct LicenseServerTests {
         try LaunchAgent.install(executable: "/Applications/Twinfold.app/Contents/MacOS/Twinfold", frequency: .weekly)
         let plist = try #require(NSDictionary(contentsOf: LaunchAgent.url))
         #expect(plist["ProgramArguments"] as? [String] == ["/Applications/Twinfold.app/Contents/MacOS/Twinfold", "--auto"])
-        #expect((plist["StartCalendarInterval"] as? [String: Int])?["Weekday"] == 0)
+        #expect(plist["StartInterval"] as? Int == 3600)
         try LaunchAgent.install(executable: "/x", frequency: .off)
         #expect(!FileManager.default.fileExists(atPath: LaunchAgent.url.path))
     }
@@ -484,15 +484,55 @@ struct PerformanceTests {
     }
 }
 
-@Suite struct ScheduleTimeTests {
-    @Test func runsAtTheChosenHourAndDefaultsToThree() throws {
-        #expect(Settings().runHour == 3)
+@Suite struct IdleScheduleTests {
+    let away = AutoRun.Conditions(idleSeconds: 900, onPower: true, battery: 80)
+
+    @Test func runsWhenDueIdleAndPowered() {
         var s = Settings()
-        s.hour = 22
-        #expect(s.runHour == 22)
-        s.hour = 99
-        #expect(s.runHour == 23)
-        let plist = LaunchAgent.plist(executable: "/x", frequency: .daily, hour: 22)
-        #expect((plist["StartCalendarInterval"] as? [String: Int])?["Hour"] == 22)
+        s.automatic = .daily
+        #expect(AutoRun.isDue(s, conditions: away))  // never ran
+        s.lastAutoRun = Date(timeIntervalSinceNow: -21 * 3600)
+        #expect(AutoRun.isDue(s, conditions: away))
+        s.lastAutoRun = Date(timeIntervalSinceNow: -2 * 3600)
+        #expect(!AutoRun.isDue(s, conditions: away))  // ran two hours ago
+        s.automatic = .weekly
+        s.lastAutoRun = Date(timeIntervalSinceNow: -3 * 86400)
+        #expect(!AutoRun.isDue(s, conditions: away))
+        s.lastAutoRun = Date(timeIntervalSinceNow: -7 * 86400)
+        #expect(AutoRun.isDue(s, conditions: away))
+        s.automatic = .off
+        #expect(!AutoRun.isDue(s, conditions: away))
+    }
+
+    @Test func waitsWhileSomeoneIsUsingTheMacOrPowerIsLow() {
+        var s = Settings()
+        s.automatic = .daily
+        #expect(!AutoRun.isDue(s, conditions: .init(idleSeconds: 30, onPower: true, battery: 80)))
+        #expect(!AutoRun.isDue(s, conditions: .init(idleSeconds: 900, onPower: false, battery: 20)))
+        #expect(AutoRun.isDue(s, conditions: .init(idleSeconds: 900, onPower: false, battery: 60)))
+        #expect(AutoRun.isDue(s, conditions: .init(idleSeconds: 900, onPower: true, battery: nil)))
+    }
+
+    /// 0.7.0 installed a fixed 3 am schedule; opening the new version replaces it with the hourly check.
+    @Test func oldScheduleIsReplaced() throws {
+        let box = Sandbox()
+        setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
+        defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
+        try FileManager.default.createDirectory(atPath: "\(box.root)/agents", withIntermediateDirectories: true)
+        let old: NSDictionary = ["Label": LaunchAgent.label, "ProgramArguments": ["/A/Twinfold", "--auto"],
+                                 "StartCalendarInterval": ["Hour": 3, "Minute": 0]]
+        old.write(to: LaunchAgent.url, atomically: true)
+        #expect(!LaunchAgent.isCurrent(executable: "/A/Twinfold", frequency: .daily))
+        try LaunchAgent.install(executable: "/A/Twinfold", frequency: .daily)
+        #expect(LaunchAgent.isCurrent(executable: "/A/Twinfold", frequency: .daily))
+        #expect(NSDictionary(contentsOf: LaunchAgent.url)?["StartInterval"] as? Int == 3600)
+    }
+
+    @Test func settingsWithTheBriefHourFieldStillLoad() throws {
+        let box = Sandbox()
+        let url = URL(fileURLWithPath: "\(box.root)/s.json")
+        try #"{"automatic":"daily","hour":22,"lastAutoSaved":0,"leaveAlone":[],"watched":["/w"]}"#
+            .write(to: url, atomically: true, encoding: .utf8)
+        #expect(Settings.load(from: url).automatic == .daily)
     }
 }
