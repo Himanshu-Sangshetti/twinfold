@@ -269,7 +269,7 @@ final class AppModel {
         guard entitlement.unlocked || frequency == .off else { return }
         settings.automatic = frequency
         settings.save()
-        if frequency != .off {
+        if frequency != .off, Bundle.main.bundlePath.hasSuffix(".app") {
             // Ask once, now, so the overnight run can say what it saved.
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
         }

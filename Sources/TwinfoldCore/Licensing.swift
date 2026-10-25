@@ -16,8 +16,10 @@ public enum Store {
     public static var productID: String { products[mode] ?? "" }
     public static let price = "$12"
 
+    /// `TWINFOLD_STORE_URL` points activation at a local stand-in server (scripts/app-e2e.sh).
     public static var apiBase: URL {
-        URL(string: mode == .live ? "https://live.dodopayments.com" : "https://test.dodopayments.com")!
+        if let url = ProcessInfo.processInfo.environment["TWINFOLD_STORE_URL"] { return URL(string: url)! }
+        return URL(string: mode == .live ? "https://live.dodopayments.com" : "https://test.dodopayments.com")!
     }
 
     public static var checkoutURL: URL {

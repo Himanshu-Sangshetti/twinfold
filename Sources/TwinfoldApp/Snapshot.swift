@@ -128,6 +128,45 @@ enum Snapshot {
         exit(0)
     }
 
+    /// `TWINFOLD_PRO_AUTOPILOT=<dir> TWINFOLD_STORE_URL=<stand-in server>` drives the Pro sheet through the calls its
+    /// controls make: Automatic is refused while locked, each key in `TWINFOLD_PRO_KEYS` (comma separated, the
+    /// working one last) is activated, then Automatic is switched on. Writes `<dir>/pro.json` and the sheet's look.
+    static func proAutopilot(_ model: AppModel) async {
+        let env = ProcessInfo.processInfo.environment
+        guard let dir = env["TWINFOLD_PRO_AUTOPILOT"], let keys = env["TWINFOLD_PRO_KEYS"] else { return }
+        let out = URL(fileURLWithPath: dir)
+        var info: [String: Any] = ["unlockedAtStart": model.entitlement.unlocked]
+        write(AutomaticSheet().environment(model).frame(height: 620), to: out.appendingPathComponent("pro-locked.png"))
+
+        model.setAutomatic(.weekly)
+        info["automaticWhileLocked"] = model.settings.automatic.rawValue
+
+        var errors: [String] = []
+        for key in keys.split(separator: ",").map(String.init) {
+            model.activate(key)
+            for _ in 0..<50 where !model.activating { try? await Task.sleep(for: .milliseconds(20)) }
+            for _ in 0..<300 where model.activating { try? await Task.sleep(for: .milliseconds(50)) }
+            errors.append(model.activationError ?? "")
+        }
+        info["errors"] = errors
+        info["unlocked"] = model.entitlement.unlocked
+        info["email"] = model.entitlement.license?.email ?? ""
+        info["savedToDisk"] = Entitlement.load().unlocked
+
+        model.setAutomatic(.weekly)
+        info["automatic"] = model.settings.automatic.rawValue
+        write(AutomaticSheet().environment(model).frame(height: 620), to: out.appendingPathComponent("pro-unlocked.png"))
+        try? JSONSerialization.data(withJSONObject: info).write(to: out.appendingPathComponent("pro.json"))
+
+        // With Automatic on, closing the window must leave the app (and its menu bar item) running.
+        NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.forEach { $0.performClose(nil) }
+        try? await Task.sleep(for: .seconds(2))
+        let windows = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.count
+        try? JSONSerialization.data(withJSONObject: ["visibleWindows": windows])
+            .write(to: out.appendingPathComponent("alive-after-close.json"))
+        exit(0)
+    }
+
     static func write(_ view: some View, to url: URL, scale: CGFloat = 2) {
         let renderer = ImageRenderer(content: view)
         renderer.scale = scale

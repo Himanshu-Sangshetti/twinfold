@@ -10,7 +10,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test
+      - run: scripts/e2e.sh
+      - run: python3 -I scripts/mcp-e2e.py
+      - run: python3 -I scripts/safety-e2e.py
+      - run: scripts/app-e2e.sh
+      - name: Version and store match the tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          grep -q "let version = \"$VERSION\"" Sources/twinfold/main.swift || { echo "main.swift version is not $VERSION"; exit 1; }
+          grep -q "mode: Mode = .live" Sources/TwinfoldCore/Licensing.swift || { echo "Store.mode is not .live"; exit 1; }
       - run: scripts/bundle.sh
+      - name: Download contains the app and the read-me
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          unzip -l dist/Twinfold-$VERSION.zip | grep -q "Twinfold.app/Contents/MacOS/" || { echo "app missing from zip"; exit 1; }
+          unzip -l dist/Twinfold-$VERSION.zip | grep -q "READ-ME-FIRST.txt" || { echo "read-me missing from zip"; exit 1; }
+          ! unzip -l dist/Twinfold-$VERSION.zip | grep -qE '__MACOSX|/\._|\s\._'
+          unzip -p dist/Twinfold-$VERSION.zip Twinfold.app/Contents/Info.plist | grep -q "<string>$VERSION</string>" || { echo "Info.plist version is not $VERSION"; exit 1; }
       - run: |
           VERSION=${GITHUB_REF_NAME#v}
           tar -czf dist/twinfold-$VERSION-macos.tar.gz -C dist twinfold

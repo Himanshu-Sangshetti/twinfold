@@ -72,6 +72,55 @@ check "automatic run kept every file's contents" "$(hashes)" "$BEFORE"
 check "automatic run recorded what it saved" "$(python3 -I -c "import json; print(json.load(open('$TWINFOLD_SUPPORT_DIR/settings.json'))['lastAutoSaved'])")" 40000000
 check "automatic run shows up in History (a journal)" "$(ls "$TWINFOLD_SUPPORT_DIR/journal" | wc -l | tr -d ' ')" 1
 
+# Pro: the license gate, with no bypass. A stand-in for Dodo's /licenses/activate answers like the real one.
+PRODUCT=$(grep -oE '\.live: "pdt_[A-Za-z0-9]+"' Sources/TwinfoldCore/Licensing.swift | grep -oE 'pdt_[A-Za-z0-9]+')
+python3 -I - "$PRODUCT" "$TMP/port" <<'EOF' &
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+product, portfile = sys.argv[1], sys.argv[2]
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        key = body["license_key"]
+        code, out = {"OFF-KEY": (403, {}), "FULL-KEY": (422, {}),
+                     "OTHER-PRODUCT": (201, {"id": "lki_x", "product": {"product_id": "pdt_other"}, "customer": {"email": "a@b.c"}}),
+                     "GOOD-KEY": (201, {"id": "lki_good", "product": {"product_id": product}, "customer": {"email": "buyer@example.com"}})
+                     }.get(key, (404, {}))
+        self.send_response(code); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(json.dumps(out).encode())
+s = HTTPServer(("127.0.0.1", 0), H)
+open(portfile, "w").write(str(s.server_address[1]))
+s.serve_forever()
+EOF
+STORE=$!
+trap 'kill $STORE 2>/dev/null; rm -rf "$TMP"' EXIT
+for _ in $(seq 1 50); do [ -s "$TMP/port" ] && break; sleep 0.1; done
+rm -f "$TWINFOLD_SUPPORT_DIR/entitlement.json"
+
+python3 -I -c "import json,sys; json.dump({'watched':[sys.argv[1]],'leaveAlone':[],'automatic':'off','lastAutoSaved':0}, open(sys.argv[2],'w'))" "$FIX" "$TWINFOLD_SUPPORT_DIR/settings.json"
+BEFORE_LOCKED=$(reclaimable)
+"$BIN/TwinfoldApp" --auto
+check "without a license, an automatic run saves nothing" "$(reclaimable)" "$BEFORE_LOCKED"
+
+TWINFOLD_PRO_AUTOPILOT=$OUT TWINFOLD_STORE_URL="http://127.0.0.1:$(cat "$TMP/port")" \
+  TWINFOLD_PRO_KEYS="TYPO-KEY,OFF-KEY,FULL-KEY,OTHER-PRODUCT, GOOD-KEY " "$BIN/TwinfoldApp" >"$TMP/pro.log" 2>&1 || { echo "Pro run crashed:"; grep -m1 reason "$TMP/pro.log" || true; }
+pro() { python3 -I -c "import json; d=json.load(open('$OUT/pro.json')); v=d['$1']; print(v[${2:-0}] if isinstance(v, list) else v)"; }
+check "Pro starts locked" "$(pro unlockedAtStart)" False
+check "Automatic can't be switched on while locked" "$(pro automaticWhileLocked)" off
+check "unknown key: says it wasn't found" "$(pro errors 0)" "That key wasn't found. Check it was pasted in full."
+check "refunded key: says it was turned off" "$(pro errors 1)" "That key has been turned off, for example after a refund."
+check "key on 3 Macs: says the limit" "$(pro errors 2)" "That key is already in use on 3 Macs."
+check "another product's key: refused" "$(pro errors 3)" "That key is for a different product."
+check "a good key pasted with spaces activates" "$(pro errors 4)" ""
+check "Pro unlocks" "$(pro unlocked)" True
+check "license remembered on disk" "$(pro savedToDisk)" True
+check "license shows the buyer's email" "$(pro email)" buyer@example.com
+check "Automatic switches on once unlocked" "$(pro automatic)" weekly
+check "closing the window keeps Twinfold running with Automatic on" "$(python3 -I -c "import json; print(json.load(open('$OUT/alive-after-close.json'))['visibleWindows'])" 2>/dev/null || echo app-quit)" 0
+"$BIN/TwinfoldApp" --auto
+check "with the license, an automatic run (no test bypass) saves the 160 MB set" "$(reclaimable)" 0
+
 mkdir -p .scratch/app-e2e && cp "$OUT"/*.png .scratch/app-e2e/
 echo
 [ $FAILS -eq 0 ] && echo "app e2e: all checks passed" || { echo "app e2e: $FAILS failed"; exit 1; }

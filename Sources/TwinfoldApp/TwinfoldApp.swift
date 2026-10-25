@@ -2,8 +2,16 @@ import SwiftUI
 import TwinfoldCore
 import UserNotifications
 
+/// Closing the window only quits Twinfold when Automatic is off; with it on, the menu bar item stays.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        Settings.load().automatic == .off
+    }
+}
+
 @main
 struct TwinfoldApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
 
     init() {
@@ -19,6 +27,7 @@ struct TwinfoldApp: App {
                 .task {
                     await Snapshot.capture(model)
                     await Snapshot.autopilot(model)
+                    await Snapshot.proAutopilot(model)
                 }
         }
         .windowStyle(.hiddenTitleBar)

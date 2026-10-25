@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1
+
+- Closing the window no longer quits Twinfold while Automatic is on: it keeps running in the menu bar. With Automatic off, closing the window quits as before.
+- New end-to-end checks for Pro: the license gate with no test bypass, every activation error (unknown, refunded, 3-Mac limit, other product), a key pasted with spaces, Automatic only after unlocking, and closing the window.
+- Releases now run every test suite and check the version, the live store setting and the download's contents before publishing.
+
 ## 0.7.0
 
 Safety release. Tested on a real Mac: 44,857 files saved (29 GB), every one of 201,219 files re-read byte for byte with identical metadata, undone, verified again, and saved again.
