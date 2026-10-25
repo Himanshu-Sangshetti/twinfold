@@ -447,3 +447,27 @@ struct PerformanceTests {
         #expect(LaunchAgent.installedExecutable == "/Applications/Twinfold.app/Contents/MacOS/Twinfold")
     }
 }
+
+@Suite struct OwnerTestFindings {
+    /// Opened from Downloads, macOS ran a temporary copy; the schedule was pointed there and would have died.
+    @Test func scheduleOnlyFromApplications() {
+        #expect(InstallLocation.isStable("/Applications/Twinfold.app", home: "/Users/a"))
+        #expect(InstallLocation.isStable("/Users/a/Applications/Twinfold.app", home: "/Users/a"))
+        #expect(!InstallLocation.isStable("/Users/a/Downloads/Twinfold.app", home: "/Users/a"))
+        #expect(!InstallLocation.isStable(
+            "/private/var/folders/y2/x/T/AppTranslocation/E0E5/d/Twinfold.app", home: "/Users/a"))
+    }
+
+    /// Two copies of an app in Downloads made Twinfold try to change app bundles, which macOS blocks.
+    @Test func appBundlesAreLeftAlone() {
+        let box = Sandbox()
+        let data = random(150_000)
+        box.file("Downloads/One/Twinfold.app/Contents/Resources/font.ttf", data)
+        box.file("Downloads/Two/Twinfold.app/Contents/Resources/font.ttf", data)
+        box.file("Downloads/notes-a.bin", data)
+        box.file("Downloads/notes-b.bin", data)
+        let report = box.scan()
+        #expect(report.groups.count == 1)
+        #expect(report.groups.first?.files.allSatisfy { !$0.contains(".app/") } == true)
+    }
+}

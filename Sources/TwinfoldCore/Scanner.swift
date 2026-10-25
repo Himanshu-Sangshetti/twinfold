@@ -205,6 +205,8 @@ public struct Scanner {
         var skip = Set(options.excludes.map { FileSystem.realPath(($0 as NSString).expandingTildeInPath) })
         skip.formUnion([
             "\(home)/.Trash",
+            "\(home)/Music/Music",  // Apple Music's media; reading it asks for media library access
+            "\(home)/Movies/TV",  // the TV app's media
             "\(home)/Library/Mobile Documents",  // iCloud Drive
             "\(home)/Library/CloudStorage",  // Dropbox, Google Drive, OneDrive
             "/System", "/private/var/vm", "/dev", "/Volumes", "/Library", "/Applications", "/usr", "/bin", "/sbin",
@@ -213,10 +215,12 @@ public struct Scanner {
         return skip
     }
 
-    /// Libraries whose apps keep their own databases about the files inside.
+    /// Libraries whose apps keep their own databases about the files inside, and apps themselves: macOS stops
+    /// one app from changing another (Privacy & Security, App Management), so their files are left alone.
     static func isProtectedBundle(_ path: String) -> Bool {
         let ext = (path as NSString).pathExtension.lowercased()
-        return ["photoslibrary", "photolibrary", "musiclibrary", "tvlibrary", "aplibrary", "backupdb", "sparsebundle"]
+        return ["photoslibrary", "photolibrary", "musiclibrary", "tvlibrary", "aplibrary", "backupdb", "sparsebundle",
+                "app"]
             .contains(ext) || path.hasSuffix("/Backups.backupdb")
     }
 }

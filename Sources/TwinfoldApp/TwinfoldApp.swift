@@ -5,7 +5,9 @@ import UserNotifications
 /// With Automatic on, Twinfold lives in the menu bar: closing the window keeps it running there (and drops the
 /// Dock icon), and at login it starts with `--menubar`, no window. With Automatic off it's a plain app.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    static let launchedForMenuBar = CommandLine.arguments.contains("--menubar") && Settings.load().livesInMenuBar
+    /// In the menu bar only with Pro, Automatic on and "keep in menu bar" on.
+    static var residesInMenuBar: Bool { Settings.load().livesInMenuBar && Entitlement.load().unlocked }
+    static let launchedForMenuBar = CommandLine.arguments.contains("--menubar") && residesInMenuBar
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         if Self.launchedForMenuBar { NSApp.setActivationPolicy(.accessory) }
@@ -23,15 +25,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 exit(0)
             }
         }
+        // A window coming forward makes Twinfold a normal app again (Dock icon, menus, ⌘V in text fields).
+        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { note in
+            guard let window = note.object as? NSWindow, window.canBecomeMain, NSApp.activationPolicy() != .regular else { return }
+            NSApp.setActivationPolicy(.regular)
+        }
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { note in
             guard let closing = note.object as? NSWindow, closing.canBecomeMain else { return }
             let others = NSApp.windows.filter { $0 !== closing && $0.isVisible && $0.canBecomeMain }
-            if others.isEmpty, Settings.load().livesInMenuBar { NSApp.setActivationPolicy(.accessory) }
+            if others.isEmpty, Self.residesInMenuBar { NSApp.setActivationPolicy(.accessory) }
         }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !Settings.load().livesInMenuBar
+        !Self.residesInMenuBar
     }
 }
 
@@ -67,7 +74,7 @@ struct TwinfoldApp: App {
         .defaultSize(width: 1180, height: 800)
 
         MenuBarExtra("Twinfold", systemImage: "square.on.square",
-                     isInserted: .constant(model.settings.livesInMenuBar)) {
+                     isInserted: .constant(model.settings.livesInMenuBar && model.entitlement.unlocked)) {
             MenuBarContent().environment(model)
         }
     }

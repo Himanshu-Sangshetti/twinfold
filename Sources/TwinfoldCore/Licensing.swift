@@ -148,3 +148,11 @@ public enum Updates {
         return false
     }
 }
+
+/// Whether an app at this path will still be there after a restart: in Applications (the Mac's or the user's),
+/// and not a temporary App Translocation copy macOS makes for apps opened straight from Downloads.
+public enum InstallLocation {
+    public static func isStable(_ path: String, home: String = NSHomeDirectory()) -> Bool {
+        !path.contains("/AppTranslocation/") && (path.hasPrefix("/Applications/") || path.hasPrefix(home + "/Applications/"))
+    }
+}

@@ -239,7 +239,7 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             Backdrop()
             VStack(spacing: 0) {
-                if model.phase != .folding { UpdateBanner() }
+                if model.phase != .folding { MoveBanner(); UpdateBanner() }
                 Group {
                     switch model.phase {
                     case .idle: IdleView()
@@ -251,7 +251,7 @@ struct ContentView: View {
                     case .history: HistoryView()
                     }
                 }
-                .padding(.top, model.update == nil ? 34 : 4)
+                .padding(.top, model.update == nil && !Install.needsMove ? 34 : 4)
             }
             TopBar()
         }
@@ -261,16 +261,25 @@ struct ContentView: View {
     }
 }
 
-/// Top right of the window: History and Automatic, always one click away.
+/// Top of the window: the name (back to the start screen) on the left, History and Automatic on the right.
 struct TopBar: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         HStack(spacing: 8) {
+            if [.results, .done, .nothing, .history].contains(model.phase) {
+                Button { model.reset() } label: {
+                    Label("Twinfold", systemImage: "chevron.left").font(.display(17))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.quiet)
+                .help("Back to the start")
+                .padding(.leading, 64)  // clear of the window buttons
+            }
             Spacer()
             if model.phase != .history {
                 GlassButton(title: "History", icon: "clock.arrow.circlepath") { model.showHistory() }
             }
-            GlassButton(title: model.settings.automatic == .off ? "Automatic" : "Automatic: \(model.settings.automatic.rawValue.capitalized)",
+            GlassButton(title: model.settings.automatic == .off || !model.entitlement.unlocked ? "Automatic" : "Automatic: \(model.settings.automatic.rawValue.capitalized)",
                         icon: "sparkles") { model.showingAutomatic = true }
                 .help("Pro: keep saving space by itself, every night or week")
         }
@@ -668,7 +677,17 @@ struct AutomaticSheet: View {
                 .font(.system(size: 13))
                 .fixedSize(horizontal: false, vertical: true)
 
-            if model.entitlement.unlocked {
+            if model.entitlement.unlocked, Install.needsMove {
+                Label("Automatic needs Twinfold in your Applications folder, so its schedule still works after a restart. Quit Twinfold, drag it from Downloads into Applications, and open it from there.",
+                      systemImage: "folder.badge.plus")
+                    .font(.system(size: 13))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    GlassButton(title: "Show Me") { Install.revealForMove() }
+                    Spacer()
+                    Button("Close") { dismiss() }.controlSize(.large).keyboardShortcut(.cancelAction)
+                }
+            } else if model.entitlement.unlocked {
                 Picker("Run", selection: Binding(get: { model.settings.automatic },
                                                  set: { model.setAutomatic($0) })) {
                     Text("Off").tag(Settings.Frequency.off)
@@ -727,6 +746,12 @@ struct AutomaticSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12, design: .monospaced))
                         .onSubmit { model.activate(key) }
+                    if key.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button("Paste") {
+                            key = NSPasteboard.general.string(forType: .string)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        }
+                    }
                     Button("Activate") { model.activate(key) }
                         .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || model.activating)
                     if model.activating { ProgressView().controlSize(.small) }
@@ -748,6 +773,32 @@ struct AutomaticSheet: View {
         }
         .padding(26)
         .frame(width: 500)
+    }
+}
+
+/// Shown while Twinfold runs from Downloads (or anywhere but Applications): macOS runs such a copy from a
+/// temporary place, so nothing that has to work later (the schedule, the login item) is set up until it's moved.
+struct MoveBanner: View {
+    var body: some View {
+        if Install.needsMove {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.badge.plus").font(.system(size: 18)).foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Move Twinfold to Applications").font(.system(size: 13, weight: .semibold))
+                    Text("It's running from Downloads. Quit Twinfold, drag it into Applications, then open it from there. Saving works anywhere; Automatic needs Applications.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.quiet)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                GlassButton(title: "Show Me") { Install.revealForMove() }
+            }
+            .padding(14)
+            .frame(maxWidth: 760)
+            .glass(16)
+            .padding(.top, 44)
+            .padding(.horizontal, 28)
+        }
     }
 }
 
@@ -784,8 +835,10 @@ struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         Text("Twinfold has saved \(Format.bytes(model.totalSaved))")
-        if let last = model.settings.lastAutoRun {
-            Text("Last automatic run \(last.formatted(.relative(presentation: .named))): \(Format.bytes(model.settings.lastAutoSaved))")
+        if model.autoRunning {
+            Text("Checking your folders…")
+        } else if let last = model.settings.lastAutoRun {
+            Text("Last run \(last.formatted(.relative(presentation: .named))): \(model.settings.lastAutoSaved > 0 ? "saved " + Format.bytes(model.settings.lastAutoSaved) : "nothing new")")
         }
         if let update = model.update {
             Button("Download Twinfold \(update)…") { model.downloadUpdate() }

@@ -74,13 +74,17 @@ final class AppModel {
     var example: DuplicateGroup?
 
     init() {
-        if let saved = ScanReport.load(), saved.reclaimableBytes > 0 {
-            let date = (try? ScanReport.savedURL.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate
-            show(saved, at: date ?? Date())
+        // Reopen the last scan only while it's still true: not after any save since (which it doesn't know
+        // about), and not after a week.
+        let scanned = (try? ScanReport.savedURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate ?? .distantPast
+        let lastSave = max(runs.map(\.date).max() ?? .distantPast, settings.lastAutoRun ?? .distantPast)
+        if scanned > lastSave, scanned > Date(timeIntervalSinceNow: -7 * 86400),
+           let saved = ScanReport.load(), saved.reclaimableBytes > 0 {
+            show(saved, at: scanned)
         }
         // After an update (or a move), point the schedule and the login item at this copy of the app.
-        if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app"), settings.automatic != .off,
+        if let exe = Bundle.main.executablePath, Install.canSchedule, settings.automatic != .off,
            LaunchAgent.installedExecutable != exe {
             try? LaunchAgent.install(executable: exe, frequency: settings.automatic)
         }
@@ -292,6 +296,7 @@ final class AppModel {
                 let license = try await Activation.activate(key: key)
                 entitlement.license = license
                 entitlement.save()
+                applyOpenAtLogin()
             } catch {
                 activationError = error.localizedDescription
             }
@@ -306,13 +311,15 @@ final class AppModel {
     /// Turns the schedule on or off; on means launchd runs this app with --auto at 3 am.
     func setAutomatic(_ frequency: Settings.Frequency) {
         guard entitlement.unlocked || frequency == .off else { return }
+        // A schedule pointing at a temporary copy would silently stop working; move the app first.
+        guard !Install.needsMove || frequency == .off else { return }
         settings.automatic = frequency
         settings.save()
         if frequency != .off, Bundle.main.bundlePath.hasSuffix(".app") {
             // Ask once, now, so the overnight run can say what it saved.
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
         }
-        if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app") {
+        if let exe = Bundle.main.executablePath, Install.canSchedule {
             try? LaunchAgent.install(executable: exe, frequency: frequency)
         }
         applyOpenAtLogin()
@@ -326,8 +333,8 @@ final class AppModel {
 
     /// Keeps the login item in step with Automatic (and with where the app now lives, after an update).
     func applyOpenAtLogin() {
-        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
-        try? LaunchAgent.setOpenAtLogin(app: Bundle.main.bundlePath, settings.livesInMenuBar)
+        guard Install.canSchedule else { return }
+        try? LaunchAgent.setOpenAtLogin(app: Bundle.main.bundlePath, settings.livesInMenuBar && entitlement.unlocked)
     }
 
     /// The overnight run and the CLI write to the same files from other processes; read them again.
@@ -361,7 +368,7 @@ final class AppModel {
     }
 
     func runAutomaticNow() {
-        guard !autoRunning else { return }
+        guard entitlement.unlocked, !autoRunning else { return }
         autoRunning = true
         var settings = settings
         Task.detached(priority: .utility) {
@@ -372,7 +379,19 @@ final class AppModel {
                 self.runs = Run.all()
                 self.autoRunning = false
             }
+            Self.announce(saved: settings.lastAutoSaved)
         }
+    }
+
+    /// After Run Now: say what happened, including when there was nothing new.
+    nonisolated static func announce(saved: Int64) {
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
+        let content = UNMutableNotificationContent()
+        content.title = saved > 0 ? "Twinfold saved \(Format.bytes(saved))" : "Nothing new to save"
+        content.body = saved > 0
+            ? "New identical files now share space. Every file is still where it was; undo it any time in History."
+            : "Twinfold checked your folders: every identical file already shares space."
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     // MARK: History
