@@ -9,6 +9,12 @@ public struct Settings: Codable, Sendable, Equatable {
     public var automatic: Frequency = .off
     public var lastAutoRun: Date?
     public var lastAutoSaved: Int64 = 0
+    /// Start in the menu bar at login while Automatic is on. Optional so settings from 0.7.0 and earlier still
+    /// load; nil means on.
+    public var openAtLogin: Bool?
+
+    /// Twinfold stays in the menu bar when its window closes, and starts there at login.
+    public var livesInMenuBar: Bool { automatic != .off && openAtLogin != false }
 
     public init() {}
 
@@ -19,7 +25,19 @@ public struct Settings: Codable, Sendable, Equatable {
         return (try? JSONDecoder().decode(Settings.self, from: data)) ?? Settings()
     }
 
+    /// Keeps the newest automatic-run result on disk: the overnight run is a separate process, so an app that
+    /// was open the whole time must not write back its older copy.
     public func save(to url: URL = Settings.url) {
+        var settings = self
+        let disk = Settings.load(from: url)
+        if let saved = disk.lastAutoRun, saved > (lastAutoRun ?? .distantPast) {
+            settings.lastAutoRun = saved
+            settings.lastAutoSaved = disk.lastAutoSaved
+        }
+        settings.write(to: url)
+    }
+
+    private func write(to url: URL) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -78,6 +96,10 @@ public struct Run: Identifiable, Sendable {
     /// can't be restored now, the journal keeps the rest so the run can be finished later.
     @discardableResult
     public func undo(progress: ((Int, Int) -> Void)? = nil) -> UndoResult {
+        RunLock.withLock { undoLocked(progress: progress) }
+    }
+
+    private func undoLocked(progress: ((Int, Int) -> Void)?) -> UndoResult {
         let entries = Journal(url: journal).entries()
         var result = UndoResult()
         var pending = Set(entries.map(\.path))
@@ -179,6 +201,35 @@ public enum LaunchAgent {
         }
         try? FileManager.default.removeItem(at: url)
     }
+
+    /// Starts Twinfold in the menu bar (no window) when the user logs in, while Automatic is on. Opened through
+    /// `open` so a Twinfold that's already running isn't started twice. Only written, not loaded now: launchd
+    /// picks it up at the next login.
+    public static let menuBarLabel = "app.twinfold.menubar"
+    public static var menuBarURL: URL { directory.appendingPathComponent("\(menuBarLabel).plist") }
+
+    public static func menuBarPlist(app: String) -> [String: Any] {
+        ["Label": menuBarLabel, "RunAtLoad": true,
+         "ProgramArguments": ["/usr/bin/open", "-g", "-j", "-a", app, "--args", "--menubar"]]
+    }
+
+    public static func setOpenAtLogin(app: String, _ on: Bool) throws {
+        try? FileManager.default.removeItem(at: menuBarURL)
+        guard on else { return }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try PropertyListSerialization.data(fromPropertyList: menuBarPlist(app: app), format: .xml, options: 0)
+        try data.write(to: menuBarURL, options: .atomic)
+    }
+
+    /// The app the 3 am schedule currently runs, if it's set up.
+    public static var installedExecutable: String? {
+        guard let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return (plist["ProgramArguments"] as? [String])?.first
+    }
+
+    public static var opensAtLogin: Bool { FileManager.default.fileExists(atPath: menuBarURL.path) }
 
     private static func launchctl(_ args: String...) {
         let process = Process()

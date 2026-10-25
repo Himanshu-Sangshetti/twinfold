@@ -394,3 +394,56 @@ struct PerformanceTests {
             == ["Beach.jpg", "torch.dylib", "zod.js"])
     }
 }
+
+@Suite struct UpdateSafetyTests {
+    /// 0.7.0 wrote settings without `openAtLogin`; reading them must keep everything the user chose.
+    @Test func settingsFrom070StillLoad() throws {
+        let box = Sandbox()
+        let url = URL(fileURLWithPath: "\(box.root)/settings.json")
+        try #"{"automatic":"weekly","lastAutoSaved":5,"leaveAlone":["/a"],"watched":["/w"]}"#
+            .write(to: url, atomically: true, encoding: .utf8)
+        let s = Settings.load(from: url)
+        #expect(s.automatic == .weekly && s.leaveAlone == ["/a"] && s.watched == ["/w"] && s.lastAutoSaved == 5)
+        #expect(s.openAtLogin == nil && s.livesInMenuBar)
+    }
+
+    /// The app may have been open since before the overnight run; saving its older copy keeps the newer result.
+    @Test func savingKeepsTheNewerAutomaticResult() {
+        let box = Sandbox()
+        let url = URL(fileURLWithPath: "\(box.root)/settings.json")
+        var overnight = Settings()
+        overnight.lastAutoRun = Date()
+        overnight.lastAutoSaved = 900
+        var app = Settings()
+        app.lastAutoRun = Date(timeIntervalSinceNow: -86400)
+        app.lastAutoSaved = 100
+        overnight.save(to: url)
+        app.leaveAlone = ["/new"]
+        app.save(to: url)
+        let s = Settings.load(from: url)
+        #expect(s.lastAutoSaved == 900 && s.leaveAlone == ["/new"])
+    }
+
+    @Test func versionsCompareByNumber() {
+        #expect(Updates.isNewer("0.7.2", than: "0.7.1"))
+        #expect(Updates.isNewer("0.10.0", than: "0.9.9"))
+        #expect(!Updates.isNewer("0.7.1", than: "0.7.1"))
+        #expect(!Updates.isNewer("0.7.0", than: "0.7.1"))
+        #expect(Updates.isNewer("1.0", than: "0.9.9"))
+    }
+
+    @Test func loginItemOpensTheAppHiddenThroughOpen() throws {
+        let box = Sandbox()
+        setenv("TWINFOLD_LAUNCH_AGENTS", "\(box.root)/agents", 1)
+        defer { unsetenv("TWINFOLD_LAUNCH_AGENTS") }
+        try LaunchAgent.setOpenAtLogin(app: "/Applications/Twinfold.app", true)
+        let plist = try #require(NSDictionary(contentsOf: LaunchAgent.menuBarURL))
+        #expect(plist["ProgramArguments"] as? [String]
+            == ["/usr/bin/open", "-g", "-j", "-a", "/Applications/Twinfold.app", "--args", "--menubar"])
+        #expect(plist["RunAtLoad"] as? Bool == true)
+        try LaunchAgent.setOpenAtLogin(app: "/Applications/Twinfold.app", false)
+        #expect(!LaunchAgent.opensAtLogin)
+        try LaunchAgent.install(executable: "/Applications/Twinfold.app/Contents/MacOS/Twinfold", frequency: .daily)
+        #expect(LaunchAgent.installedExecutable == "/Applications/Twinfold.app/Contents/MacOS/Twinfold")
+    }
+}

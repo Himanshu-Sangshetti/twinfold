@@ -2,7 +2,7 @@
 # Builds dist/Twinfold.app (universal when the toolchain allows) and dist/twinfold (CLI).
 set -e
 cd "$(dirname "$0")/.."
-VERSION=$(grep 'let version' Sources/twinfold/main.swift | sed 's/.*"\(.*\)".*/\1/')
+VERSION=$(grep 'static let version' Sources/TwinfoldCore/Licensing.swift | sed 's/.*"\(.*\)".*/\1/')
 ARCHS="--arch arm64 --arch x86_64"
 swift build -c release $ARCHS --product TwinfoldApp 2>/dev/null || ARCHS=""
 swift build -c release $ARCHS --product TwinfoldApp

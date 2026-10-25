@@ -2,10 +2,36 @@ import SwiftUI
 import TwinfoldCore
 import UserNotifications
 
-/// Closing the window only quits Twinfold when Automatic is off; with it on, the menu bar item stays.
+/// With Automatic on, Twinfold lives in the menu bar: closing the window keeps it running there (and drops the
+/// Dock icon), and at login it starts with `--menubar`, no window. With Automatic off it's a plain app.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static let launchedForMenuBar = CommandLine.arguments.contains("--menubar") && Settings.load().livesInMenuBar
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        if Self.launchedForMenuBar { NSApp.setActivationPolicy(.accessory) }
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // scripts/app-e2e.sh: report, a few seconds after launch, what a login start looks like.
+        if let dir = ProcessInfo.processInfo.environment["TWINFOLD_LAUNCH_PROBE"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                let windows = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.count
+                let info: [String: Any] = ["visibleWindows": windows,
+                                           "inDock": NSApp.activationPolicy() == .regular]
+                try? JSONSerialization.data(withJSONObject: info)
+                    .write(to: URL(fileURLWithPath: dir).appendingPathComponent("launch.json"))
+                exit(0)
+            }
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { note in
+            guard let closing = note.object as? NSWindow, closing.canBecomeMain else { return }
+            let others = NSApp.windows.filter { $0 !== closing && $0.isVisible && $0.canBecomeMain }
+            if others.isEmpty, Settings.load().livesInMenuBar { NSApp.setActivationPolicy(.accessory) }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        Settings.load().automatic == .off
+        !Settings.load().livesInMenuBar
     }
 }
 
@@ -13,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct TwinfoldApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
+    @MainActor static var startedHidden = false
 
     init() {
         Typography.register()
@@ -25,16 +52,22 @@ struct TwinfoldApp: App {
             ContentView()
                 .environment(model)
                 .task {
+                    // Started at login: stay in the menu bar, no window.
+                    if AppDelegate.launchedForMenuBar, !Self.startedHidden {
+                        Self.startedHidden = true
+                        NSApp.windows.filter { $0.canBecomeMain }.forEach { $0.close() }
+                    }
                     await Snapshot.capture(model)
                     await Snapshot.autopilot(model)
                     await Snapshot.proAutopilot(model)
+                    await Snapshot.liveAutopilot(model)
                 }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 800)
 
         MenuBarExtra("Twinfold", systemImage: "square.on.square",
-                     isInserted: .constant(model.settings.automatic != .off)) {
+                     isInserted: .constant(model.settings.livesInMenuBar)) {
             MenuBarContent().environment(model)
         }
     }

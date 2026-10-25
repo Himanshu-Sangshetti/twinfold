@@ -14,6 +14,7 @@ trap 'rm -rf "$TMP"' EXIT
 FIX=$TMP/fixture OUT=$TMP/out
 export TWINFOLD_SUPPORT_DIR=$TMP/support
 export TWINFOLD_QUIET_SECONDS=0
+export TWINFOLD_UPDATE_URL=http://127.0.0.1:9/no-update-checks-in-tests
 mkdir -p "$FIX" "$OUT"
 
 # 0keep holds the originals (sorts first, so it is kept); A holds 2 copies of an 80 MB file, B one copy of 40 MB.
@@ -93,7 +94,7 @@ s = HTTPServer(("127.0.0.1", 0), H)
 open(portfile, "w").write(str(s.server_address[1]))
 s.serve_forever()
 EOF
-STORE=$!
+STORE=$!; disown $STORE
 trap 'kill $STORE 2>/dev/null; rm -rf "$TMP"' EXIT
 for _ in $(seq 1 50); do [ -s "$TMP/port" ] && break; sleep 0.1; done
 rm -f "$TWINFOLD_SUPPORT_DIR/entitlement.json"
@@ -120,6 +121,68 @@ check "Automatic switches on once unlocked" "$(pro automatic)" weekly
 check "closing the window keeps Twinfold running with Automatic on" "$(python3 -I -c "import json; print(json.load(open('$OUT/alive-after-close.json'))['visibleWindows'])" 2>/dev/null || echo app-quit)" 0
 "$BIN/TwinfoldApp" --auto
 check "with the license, an automatic run (no test bypass) saves the 160 MB set" "$(reclaimable)" 0
+
+# The open app picks things up by itself: the update notice, and a 3 am run done by another process.
+LIVE=$TMP/live FEED=$TMP/feed
+mkdir -p "$LIVE" "$FEED" "$FIX/C"
+cp "$FIX/0keep/f2.bin" "$FIX/C/f2.bin"
+echo '{"tag_name":"v9.9.9"}' > "$FEED/newer.json"
+grep -o 'static let version = "[^"]*"' Sources/TwinfoldCore/Licensing.swift | sed 's/.*"\(.*\)"/{"tag_name":"v\1"}/' > "$FEED/same.json"
+python3 -I -u -m http.server 0 --bind 127.0.0.1 --directory "$FEED" > "$TMP/feed.log" 2>&1 &
+FEEDPID=$!; disown $FEEDPID
+trap 'kill $STORE $FEEDPID 2>/dev/null; rm -rf "$TMP"' EXIT
+FEEDPORT=
+for _ in $(seq 1 50); do FEEDPORT=$(grep -oE 'port [0-9]+' "$TMP/feed.log" | grep -oE '[0-9]+' || true); [ -n "$FEEDPORT" ] && break; sleep 0.1; done
+live() { python3 -I -c "import json; print(json.load(open('$LIVE/live.json'))['$1'])"; }
+until_file() { for _ in $(seq 1 300); do [ -f "$1" ] && return 0; sleep 0.2; done; echo "timed out waiting for $1"; exit 1; }
+
+TWINFOLD_LIVE_AUTOPILOT=$LIVE TWINFOLD_UPDATE_URL="http://127.0.0.1:$FEEDPORT/newer.json" "$BIN/TwinfoldApp" >/dev/null 2>&1 &
+APP=$!
+until_file "$LIVE/ready"
+"$BIN/TwinfoldApp" --auto
+touch "$LIVE/go"; wait $APP || true
+check "the open app shows when a newer version is out" "$(live update)" 9.9.9
+check "the open app shows the 3 am run (done by another process) without reopening" "$(live savedAfter)" 40000000
+cp "$LIVE/update-banner.png" "$OUT/" 2>/dev/null || true
+
+rm -f "$LIVE"/*; touch "$LIVE/go"
+TWINFOLD_LIVE_AUTOPILOT=$LIVE TWINFOLD_UPDATE_URL="http://127.0.0.1:$FEEDPORT/same.json" "$BIN/TwinfoldApp" >/dev/null 2>&1 || true
+check "no update notice when this is the latest version" "$(live update)" ""
+
+# Started at login (--menubar) with Automatic on: menu bar only, no window, no Dock icon.
+rm -f "$LIVE"/*
+TWINFOLD_LAUNCH_PROBE=$LIVE "$BIN/TwinfoldApp" --menubar >/dev/null 2>&1 || true
+check "login start opens no window" "$(python3 -I -c "import json; print(json.load(open('$LIVE/launch.json'))['visibleWindows'])")" 0
+check "login start shows no Dock icon" "$(python3 -I -c "import json; print(json.load(open('$LIVE/launch.json'))['inDock'])")" False
+python3 -I -c "import json,sys; p=sys.argv[1]; d=json.load(open(p)); d['openAtLogin']=False; json.dump(d, open(p,'w'))" "$TWINFOLD_SUPPORT_DIR/settings.json"
+rm -f "$LIVE"/*
+TWINFOLD_LAUNCH_PROBE=$LIVE "$BIN/TwinfoldApp" --menubar >/dev/null 2>&1 || true
+check "with 'keep in menu bar' off, it opens as a normal window" "$(python3 -I -c "import json; print(json.load(open('$LIVE/launch.json'))['visibleWindows'])")" 1
+
+# Two saves at once (the 3 am run while the app saves): one waits for the other; every file stays intact.
+TWO=$TMP/two; mkdir -p "$TWO"
+python3 -I -c "import os,sys; d=os.urandom(30_000_000); [open(os.path.join(sys.argv[1], f'c{i}.bin'),'wb').write(d) for i in range(6)]" "$TWO"
+TWO_BEFORE=$(cd "$TWO" && shasum -a 256 * | sort)
+"$BIN/twinfold" reclaim -y "$TWO" > "$TMP/r1.log" 2>&1 & R1=$!
+"$BIN/twinfold" reclaim -y "$TWO" > "$TMP/r2.log" 2>&1 & R2=$!
+wait $R1; S1=$?; wait $R2; S2=$?
+check "two saves at the same time both finish cleanly" "$S1$S2" 00
+check "every file intact after two saves at once" "$(cd "$TWO" && shasum -a 256 * | sort)" "$TWO_BEFORE"
+check "no temp files left behind" "$(ls -A "$TWO" | grep -c twinfold || true)" 0
+check "all copies share storage afterwards" "$("$BIN/twinfold" scan --json "$TWO" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["reclaimableBytes"])')" 0
+
+# The lock itself: while another process holds it, a save waits and changes nothing; then it finishes.
+HELD=$TMP/held; mkdir -p "$HELD"
+python3 -I -c "import os,sys; d=os.urandom(20_000_000); [open(os.path.join(sys.argv[1], f'h{i}.bin'),'wb').write(d) for i in range(3)]" "$HELD"
+python3 -I -c "import fcntl,sys,time,os; f=open(os.path.join(sys.argv[1],'run.lock'),'a'); fcntl.flock(f, fcntl.LOCK_EX); open(sys.argv[2],'w').close(); time.sleep(4)" "$TWINFOLD_SUPPORT_DIR" "$TMP/locked" &
+HOLDER=$!
+until_file "$TMP/locked"
+"$BIN/twinfold" reclaim -y "$HELD" > "$TMP/held.log" 2>&1 & SAVER=$!
+sleep 2
+check "a save waits while another Twinfold holds the lock (nothing shared yet)" "$("$BIN/twinfold" scan --json "$HELD" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["reclaimableBytes"])')" 40000000
+check "and hasn't touched the folder (no temp files)" "$(ls -A "$HELD" | grep -c twinfold || true)" 0
+wait $HOLDER; wait $SAVER
+check "once the lock is free, the save finishes" "$("$BIN/twinfold" scan --json "$HELD" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["reclaimableBytes"])')" 0
 
 mkdir -p .scratch/app-e2e && cp "$OUT"/*.png .scratch/app-e2e/
 echo

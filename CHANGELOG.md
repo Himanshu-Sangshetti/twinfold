@@ -2,9 +2,12 @@
 
 ## 0.7.1
 
-- Closing the window no longer quits Twinfold while Automatic is on: it keeps running in the menu bar. With Automatic off, closing the window quits as before.
-- New end-to-end checks for Pro: the license gate with no test bypass, every activation error (unknown, refunded, 3-Mac limit, other product), a key pasted with spaces, Automatic only after unlocking, and closing the window.
-- Releases now run every test suite and check the version, the live store setting and the download's contents before publishing.
+- With Automatic on, Twinfold now lives in the menu bar: closing the window keeps it running there (no Dock icon), and it starts there, without a window, when you log in. A switch in Automatic turns this off. With Automatic off, closing the window quits as before.
+- The app notices when a newer version is out (one request to GitHub a day) and shows how to update; your license and settings carry over.
+- The open app now picks up overnight runs by itself, and only one save or undo runs at a time across the app, the overnight run and the command line, so they never get in each other's way.
+- After an update or a move, the 3 am schedule and the login item point at the new copy of the app.
+- An idle window no longer uses CPU (the start animation plays three times, then rests).
+- New end-to-end checks for all of the above, for Pro activation (every error, no test bypass) and for upgrading from 0.7.0; releases now run every test suite and check the version and download before publishing.
 
 ## 0.7.0
 

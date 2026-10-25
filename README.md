@@ -52,6 +52,10 @@ swift build -c release && cp .build/release/twinfold /usr/local/bin/
 
 Requires macOS 14 or later. Works on any APFS volume, the default on every Mac since 2017.
 
+**Updating:** when a new version is out, the app shows it with a Download button. Quit Twinfold (from the
+menu bar if Automatic is on), then drag the new one into Applications and replace the old one. Your Pro
+license, settings and History stay.
+
 ## Free, and Pro
 
 **Free, unlimited:** scanning, saving any amount of space, the live check, History with undo for every run,
@@ -59,7 +63,8 @@ folders you leave alone remembered, the command line tool, and the source code.
 
 **Twinfold Pro, $12 once** (no subscription, up to 3 Macs) adds **Automatic**: Twinfold checks your
 folders at 3 am every day or week and stores new duplicates once, with a menu bar item showing what it saved.
-Every automatic run shows up in History and can be undone.
+Twinfold stays in the menu bar when you close its window and starts there when you log in (you can turn that
+off). Every automatic run shows up in History and can be undone.
 
 If Twinfold saved you space and you'd just like to say thanks, you can
 [sponsor it on GitHub](https://github.com/sponsors/Himanshu-Sangshetti).
@@ -146,6 +151,10 @@ frees less than Finder shows, because the others still use that data.
 
 **Why did the space come back after a while?** If you edit folded files, the edited parts take new
 space. Run Twinfold again any time.
+
+**Does the app connect to the internet?** Only for two things: once a day it asks GitHub whether a newer
+version is out (nothing about you or your files is sent), and when you activate a Pro key it checks the key
+with the store. Scanning and saving never leave your Mac.
 
 **Similar tools:** [Hyperspace](https://hypercritical.co/hyperspace/) is a polished paid app that does
 the same thing. [fclones](https://github.com/pkolaczk/fclones) can do it from the command line. Twinfold

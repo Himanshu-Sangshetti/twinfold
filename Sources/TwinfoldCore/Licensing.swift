@@ -115,3 +115,36 @@ public enum Activation {
                        email: body.customer.email, activatedAt: now)
     }
 }
+
+/// Tells the app when a newer Twinfold is out (one small request to GitHub's public releases API, at most once a
+/// day). `TWINFOLD_UPDATE_URL` points it at a stand-in (scripts/app-e2e.sh). Nothing is sent but the request.
+public enum Updates {
+    public static let version = "0.7.1"
+    public static let download = URL(string: "https://github.com/Himanshu-Sangshetti/twinfold/releases/latest/download/Twinfold.zip")!
+    public static let notes = URL(string: "https://github.com/Himanshu-Sangshetti/twinfold/releases/latest")!
+
+    static var feed: URL {
+        URL(string: ProcessInfo.processInfo.environment["TWINFOLD_UPDATE_URL"]
+            ?? "https://api.github.com/repos/Himanshu-Sangshetti/twinfold/releases/latest")!
+    }
+
+    /// The newer version's number, or nil when this one is the latest (or the check couldn't run).
+    public static func newer() async -> String? {
+        var request = URLRequest(url: feed, timeoutInterval: 15)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let tag = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["tag_name"] as? String
+        else { return nil }
+        let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        return isNewer(latest, than: version) ? latest : nil
+    }
+
+    public static func isNewer(_ a: String, than b: String) -> Bool {
+        let x = a.split(separator: ".").map { Int($0) ?? 0 }, y = b.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(x.count, y.count) where (i < x.count ? x[i] : 0) != (i < y.count ? y[i] : 0) {
+            return (i < x.count ? x[i] : 0) > (i < y.count ? y[i] : 0)
+        }
+        return false
+    }
+}

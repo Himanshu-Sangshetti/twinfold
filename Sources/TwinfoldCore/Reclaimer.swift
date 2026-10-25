@@ -57,6 +57,10 @@ public struct Reclaimer {
     }
 
     public func reclaim(_ groups: [DuplicateGroup]) -> ReclaimSummary {
+        RunLock.withLock { reclaimLocked(groups) }
+    }
+
+    private func reclaimLocked(_ groups: [DuplicateGroup]) -> ReclaimSummary {
         Safety.cleanUpInterrupted()
         var summary = ReclaimSummary()
         let volume = groups.first?.keeper ?? NSHomeDirectory()
@@ -243,6 +247,18 @@ public enum Unfolder {
             return false
         }
         return true
+    }
+}
+
+/// One save or undo at a time across every Twinfold process (the app, the overnight run, the CLI), so one never
+/// clears another's in-flight temp file or reads a journal mid-write. Later callers wait their turn.
+public enum RunLock {
+    public static func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        try? FileManager.default.createDirectory(at: Support.directory, withIntermediateDirectories: true)
+        let fd = open(Support.directory.appendingPathComponent("run.lock").path, O_RDWR | O_CREAT, 0o644)
+        if fd >= 0 { flock(fd, LOCK_EX) }
+        defer { if fd >= 0 { flock(fd, LOCK_UN); close(fd) } }
+        return try body()
     }
 }
 

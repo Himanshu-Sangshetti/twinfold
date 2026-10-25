@@ -238,18 +238,21 @@ struct ContentView: View {
         @Bindable var model = model
         ZStack(alignment: .top) {
             Backdrop()
-            Group {
-                switch model.phase {
-                case .idle: IdleView()
-                case .scanning: ScanningView()
-                case .results: ResultsView()
-                case .folding: FoldingView()
-                case .done: DoneView()
-                case .nothing: NothingView()
-                case .history: HistoryView()
+            VStack(spacing: 0) {
+                if model.phase != .folding { UpdateBanner() }
+                Group {
+                    switch model.phase {
+                    case .idle: IdleView()
+                    case .scanning: ScanningView()
+                    case .results: ResultsView()
+                    case .folding: FoldingView()
+                    case .done: DoneView()
+                    case .nothing: NothingView()
+                    case .history: HistoryView()
+                    }
                 }
+                .padding(.top, model.update == nil ? 34 : 4)
             }
-            .padding(.top, 34)
             TopBar()
         }
         .frame(minWidth: 1080, idealWidth: 1180, minHeight: 680, idealHeight: 780)
@@ -673,6 +676,10 @@ struct AutomaticSheet: View {
                     Text("Every week").tag(Settings.Frequency.weekly)
                 }
                 .pickerStyle(.segmented)
+                Toggle("Keep Twinfold in the menu bar, and start it there when you log in",
+                       isOn: Binding(get: { model.settings.openAtLogin != false }, set: { model.setOpenAtLogin($0) }))
+                    .font(.system(size: 12))
+                    .disabled(model.settings.automatic == .off)
                 FolderSettingsList(title: "Watched folders", paths: model.settings.watched,
                                    empty: "No folders yet. Add one so Automatic has something to check.",
                                    remove: model.removeWatched)
@@ -744,6 +751,33 @@ struct AutomaticSheet: View {
     }
 }
 
+/// Shown at the top of the window when a newer Twinfold is out, with how to install it.
+struct UpdateBanner: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        if let update = model.update {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle.fill").font(.system(size: 18)).foregroundStyle(Color.fold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Twinfold \(update) is out").font(.system(size: 13, weight: .semibold))
+                    Text("Download it, quit Twinfold, then drag the new one into Applications and replace the old one. Your Pro license, settings and History stay.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.quiet)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Link("What's new", destination: Updates.notes).font(.system(size: 12))
+                GlassButton(title: "Download") { model.downloadUpdate() }
+            }
+            .padding(14)
+            .frame(maxWidth: 760)
+            .glass(16)
+            .padding(.top, 44)
+            .padding(.horizontal, 28)
+        }
+    }
+}
+
 /// Menu bar item while Automatic is on.
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
@@ -753,9 +787,13 @@ struct MenuBarContent: View {
         if let last = model.settings.lastAutoRun {
             Text("Last automatic run \(last.formatted(.relative(presentation: .named))): \(Format.bytes(model.settings.lastAutoSaved))")
         }
+        if let update = model.update {
+            Button("Download Twinfold \(update)…") { model.downloadUpdate() }
+        }
         Divider()
         Button(model.autoRunning ? "Running…" : "Run Now") { model.runAutomaticNow() }.disabled(model.autoRunning)
         Button("Open Twinfold") {
+            NSApp.setActivationPolicy(.regular)
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }

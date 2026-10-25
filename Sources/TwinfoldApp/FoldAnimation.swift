@@ -2,7 +2,8 @@ import SwiftUI
 import TwinfoldCore
 
 /// The idea in motion: two identical files each hold their own block on disk, then the blocks fold into one
-/// while both files stay put and point at it. Loops gently.
+/// while both files stay put and point at it. Plays three times, then rests folded so an idle window costs
+/// no CPU.
 struct FoldAnimation: View {
     var size = CGSize(width: 400, height: 150)
     @State private var folded: Bool
@@ -45,7 +46,7 @@ struct FoldAnimation: View {
         .accessibilityLabel("Two identical files, each storing its own copy, fold into one shared copy on disk.")
         .task {
             guard !Look.captured else { return }
-            while !Task.isCancelled {
+            for _ in 0..<(folded ? 6 : 5) where !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2.2))
                 withAnimation(.spring(duration: 0.9, bounce: 0.18)) { folded.toggle() }
             }

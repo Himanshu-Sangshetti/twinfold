@@ -79,6 +79,45 @@ final class AppModel {
                 .contentModificationDate
             show(saved, at: date ?? Date())
         }
+        // After an update (or a move), point the schedule and the login item at this copy of the app.
+        if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app"), settings.automatic != .off,
+           LaunchAgent.installedExecutable != exe {
+            try? LaunchAgent.install(executable: exe, frequency: settings.automatic)
+        }
+        applyOpenAtLogin()
+        watchSupportFolder()
+        Task { await checkForUpdatesDaily() }
+    }
+
+    /// A newer version's number, once the daily check finds one.
+    private(set) var update: String?
+
+    private func checkForUpdatesDaily() async {
+        while !Task.isCancelled {
+            if let newer = await Updates.newer() { update = newer }
+            try? await Task.sleep(for: .seconds(24 * 3600))
+        }
+    }
+
+    func downloadUpdate() { NSWorkspace.shared.open(Updates.download) }
+
+    /// Reloads when another process (the 3 am run, the CLI) writes settings, the license or a journal. Event
+    /// driven, so it costs nothing while idle.
+    private var watchers: [DispatchSourceFileSystemObject] = []
+    private func watchSupportFolder() {
+        for dir in [Support.directory, Journal.directory] {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let fd = open(dir.path, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+            source.setEventHandler { [weak self] in
+                guard let self, self.phase != .folding else { return }
+                self.reloadFromDisk()
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            watchers.append(source)
+        }
     }
 
     var rootName: String {
@@ -276,6 +315,26 @@ final class AppModel {
         if let exe = Bundle.main.executablePath, Bundle.main.bundlePath.hasSuffix(".app") {
             try? LaunchAgent.install(executable: exe, frequency: frequency)
         }
+        applyOpenAtLogin()
+    }
+
+    func setOpenAtLogin(_ on: Bool) {
+        settings.openAtLogin = on
+        settings.save()
+        applyOpenAtLogin()
+    }
+
+    /// Keeps the login item in step with Automatic (and with where the app now lives, after an update).
+    func applyOpenAtLogin() {
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
+        try? LaunchAgent.setOpenAtLogin(app: Bundle.main.bundlePath, settings.livesInMenuBar)
+    }
+
+    /// The overnight run and the CLI write to the same files from other processes; read them again.
+    func reloadFromDisk() {
+        settings = Settings.load()
+        entitlement = Entitlement.load()
+        runs = Run.all()
     }
 
     func addWatchedFolders() {

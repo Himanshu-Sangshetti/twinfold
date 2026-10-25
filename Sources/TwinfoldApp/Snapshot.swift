@@ -167,6 +167,32 @@ enum Snapshot {
         exit(0)
     }
 
+    /// `TWINFOLD_LIVE_AUTOPILOT=<dir>` checks what the open app picks up by itself: the update notice (from
+    /// `TWINFOLD_UPDATE_URL`), then, once `<dir>/go` exists, an overnight run done by another process.
+    static func liveAutopilot(_ model: AppModel) async {
+        guard let dir = ProcessInfo.processInfo.environment["TWINFOLD_LIVE_AUTOPILOT"] else { return }
+        let out = URL(fileURLWithPath: dir)
+        var info: [String: Any] = [:]
+        for _ in 0..<100 where model.update == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        info["update"] = model.update ?? ""
+        try? await Task.sleep(for: .milliseconds(700))
+        if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
+           let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("update-banner.png"))
+        }
+        let before = model.settings.lastAutoSaved
+        info["savedBefore"] = before
+        FileManager.default.createFile(atPath: out.appendingPathComponent("ready").path, contents: nil)
+        let go = out.appendingPathComponent("go")
+        for _ in 0..<600 where !FileManager.default.fileExists(atPath: go.path) { try? await Task.sleep(for: .milliseconds(100)) }
+        for _ in 0..<100 where model.settings.lastAutoSaved == before { try? await Task.sleep(for: .milliseconds(100)) }
+        info["savedAfter"] = model.settings.lastAutoSaved
+        info["runs"] = model.runs.count
+        try? JSONSerialization.data(withJSONObject: info).write(to: out.appendingPathComponent("live.json"))
+        exit(0)
+    }
+
     static func write(_ view: some View, to url: URL, scale: CGFloat = 2) {
         let renderer = ImageRenderer(content: view)
         renderer.scale = scale
