@@ -662,7 +662,7 @@ struct HistoryView: View {
 struct AutomaticSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var key = ""
+    @State private var key = ProcessInfo.processInfo.environment["TWINFOLD_SHEET_KEY"] ?? ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -742,9 +742,15 @@ struct AutomaticSheet: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color.quiet)
                 HStack {
+                    // Drawn by hand: the system rounded field lost its text color in the glass sheet.
                     TextField("License key", text: $key)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12, design: .monospaced))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Color.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.primary.opacity(0.15)))
                         .onSubmit { model.activate(key) }
                     if key.trimmingCharacters(in: .whitespaces).isEmpty {
                         Button("Paste") {
@@ -755,6 +761,12 @@ struct AutomaticSheet: View {
                     Button("Activate") { model.activate(key) }
                         .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || model.activating)
                     if model.activating { ProgressView().controlSize(.small) }
+                }
+                if !key.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text("Key: \(key.trimmingCharacters(in: .whitespacesAndNewlines))")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.quiet)
+                        .textSelection(.enabled)
                 }
                 if let error = model.activationError {
                     Text(error).font(.system(size: 12)).foregroundStyle(.orange)

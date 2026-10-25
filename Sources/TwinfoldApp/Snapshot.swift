@@ -173,13 +173,17 @@ enum Snapshot {
         guard let dir = ProcessInfo.processInfo.environment["TWINFOLD_LIVE_AUTOPILOT"] else { return }
         let out = URL(fileURLWithPath: dir)
         var info: [String: Any] = [:]
+        if ProcessInfo.processInfo.environment["TWINFOLD_LIGHT"] == "1" { NSApp.appearance = NSAppearance(named: .aqua) }
         for _ in 0..<100 where model.update == nil { try? await Task.sleep(for: .milliseconds(100)) }
         info["update"] = model.update ?? ""
         try? await Task.sleep(for: .milliseconds(700))
-        if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
-           let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-            view.cacheDisplay(in: view.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("update-banner.png"))
+        if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView {
+            window.effectiveAppearance.performAsCurrentDrawingAppearance {
+                if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("update-banner.png"))
+                }
+            }
         }
         let before = model.settings.lastAutoSaved
         info["savedBefore"] = before
@@ -190,6 +194,25 @@ enum Snapshot {
         info["savedAfter"] = model.settings.lastAutoSaved
         info["runs"] = model.runs.count
         try? JSONSerialization.data(withJSONObject: info).write(to: out.appendingPathComponent("live.json"))
+        exit(0)
+    }
+
+    /// `TWINFOLD_SHEET_SHOT=<png> [TWINFOLD_SHEET_DARK=1]` opens the Automatic sheet in the real window and saves
+    /// how it draws, as the window draws it (real text fields, real appearance).
+    static func sheetShot(_ model: AppModel) async {
+        let env = ProcessInfo.processInfo.environment
+        guard let file = env["TWINFOLD_SHEET_SHOT"] else { return }
+        NSApp.appearance = NSAppearance(named: env["TWINFOLD_SHEET_DARK"] == "1" ? .darkAqua : .aqua)
+        model.showingAutomatic = true
+        try? await Task.sleep(for: .seconds(2))
+        if let sheet = NSApp.windows.first(where: { $0.isSheet && $0.isVisible }), let view = sheet.contentView {
+            sheet.effectiveAppearance.performAsCurrentDrawingAppearance {
+                if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: file))
+                }
+            }
+        }
         exit(0)
     }
 
