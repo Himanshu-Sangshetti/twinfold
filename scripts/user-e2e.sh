@@ -3,7 +3,8 @@
 # space on files another app created. macOS tags every file with the app that made it
 # (com.apple.provenance), and a clone always gets the cloning app's tag, so files from other apps are the
 # real-world case. Uses a headless Chrome to make them; skips (and says so) if Chrome isn't installed.
-# Needs dist/Twinfold.app (scripts/bundle.sh).
+# Needs dist/Twinfold.app (scripts/bundle.sh). Run on a real Mac before each release: CI machines can't
+# reliably open apps through Launch Services.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
